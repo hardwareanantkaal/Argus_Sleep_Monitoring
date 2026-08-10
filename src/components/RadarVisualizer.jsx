@@ -62,7 +62,7 @@ export default function RadarVisualizer({ presence, distance, motion, online }) 
           <span className="metric-val">{motionLabel}</span>
         </div>
         <div className="radar-metric">
-          <span className="metric-lbl">Radar Sensor Link</span>
+          <span className="metric-lbl">Sensor Link</span>
           <span className={`metric-status ${online ? "good" : "off"}`}>
             {online ? "ACTIVE" : "OFFLINE"}
           </span>

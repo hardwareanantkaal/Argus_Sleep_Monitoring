@@ -78,7 +78,7 @@ export default function TonightSection({ live }) {
         <div className="card-box tonight-info-card">
           <p className="tonight-info-text">
             {isTracking
-              ? `Session active — radar unit is tracking sleep stages, breathing rhythm, and movement dynamics in real time.`
+              ? `Session active — sensor unit is tracking sleep stages, breathing rhythm, and movement dynamics in real time.`
               : `No session — lie in bed and stay still; tracking starts within a minute.`}
           </p>
         </div>

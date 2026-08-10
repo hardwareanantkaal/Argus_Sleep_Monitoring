@@ -1,6 +1,8 @@
 import React, { useState } from "react";
+import { db } from "../firebase.js";
+import { ref, set } from "firebase/database";
 
-export default function PlacementCheckModal({ isOpen, onClose, live }) {
+export default function PlacementCheckModal({ isOpen, onClose, live, deviceId }) {
   const [calibrating, setCalibrating] = useState(false);
   const [activeTip, setActiveTip] = useState(null); // index of clicked tip
 
@@ -30,13 +32,13 @@ export default function PlacementCheckModal({ isOpen, onClose, live }) {
       id: "breathing",
       label: "Breathing detected",
       passed: hasBreath,
-      explanation: "Radar searching for chest movement. Breathe steadily and ensure sensor is facing your chest.",
+      explanation: "Sensor searching for chest movement. Breathe steadily and ensure sensor is facing your chest.",
     },
     {
       id: "heart",
       label: "Heart rate locked",
       passed: hasHeart,
-      explanation: "Acquiring micro-cardiac rhythm. Remain calm and stay still within 0.8 meters for radar signal lock.",
+      explanation: "Acquiring micro-cardiac rhythm. Remain calm and stay still within 0.8 meters for sensor signal lock.",
     },
   ];
 
@@ -46,7 +48,7 @@ export default function PlacementCheckModal({ isOpen, onClose, live }) {
   // Status guidance message
   let statusMessage = "No target — place sensor ~0.5–0.8 m away";
   if (metCount === 4) {
-    statusMessage = "Perfect spot — radar fully locked!";
+    statusMessage = "Perfect spot — sensor fully locked!";
   } else if (metCount === 3) {
     statusMessage = "Almost — keep still, breathe slowly...";
   } else if (metCount === 2) {
@@ -60,11 +62,21 @@ export default function PlacementCheckModal({ isOpen, onClose, live }) {
   const circumference = 2 * Math.PI * radius;
   const progressOffset = circumference - (signalScore / 100) * circumference;
 
-  const handleRecalibrate = () => {
-    setCalibrating(true);
-    setTimeout(() => {
-      setCalibrating(false);
-    }, 2500);
+  const handleRecalibrate = async () => {
+    try {
+      setCalibrating(true);
+      if (deviceId) {
+        // Write recalibrate: true to Firebase RTDB under /devices/{deviceId}/info/recalibrate
+        const recalibrateRef = ref(db, `devices/${deviceId}/info/recalibrate`);
+        await set(recalibrateRef, true);
+      }
+    } catch (err) {
+      console.error("Failed to send recalibrate command to Firebase:", err);
+    } finally {
+      setTimeout(() => {
+        setCalibrating(false);
+      }, 2500);
+    }
   };
 
   return (
@@ -115,7 +127,7 @@ export default function PlacementCheckModal({ isOpen, onClose, live }) {
         </div>
 
         {/* Dynamic Status Message */}
-        <div className="placement-status-msg">{calibrating ? "Calibrating radar beam..." : statusMessage}</div>
+        <div className="placement-status-msg">{calibrating ? "Calibrating sensor beam..." : statusMessage}</div>
 
         {/* Condition Checklist with Failure Explanations */}
         <div className="placement-checklist">
@@ -168,18 +180,18 @@ export default function PlacementCheckModal({ isOpen, onClose, live }) {
         <div className="breath-pacer-wrapper">
           <div className="breath-pacer-sphere" />
           <p className="breath-pacer-guide">
-            Breathe slowly with the circle — it helps the radar lock faster.
+            Place the sensor ~0.5–0.8 m away, chest facing it. All four green = perfect spot.
           </p>
         </div>
 
         {/* Action Button */}
         <button className="recalibrate-btn" onClick={handleRecalibrate} disabled={calibrating}>
-          {calibrating ? "Recalibrating..." : "Recalibrate sensor"}
+          {calibrating ? "Recalibrating sensor..." : "Recalibrate sensor"}
         </button>
 
         {/* Placement Instruction Subtext */}
         <p className="placement-footer-subtext">
-          Place the sensor ~0.5–0.8 m away, chest facing it. All four green = perfect spot.
+          After recalibration, the sensor will takes 1-2 minutes to lock onto your breathing and heart rate. 
         </p>
       </div>
     </div>

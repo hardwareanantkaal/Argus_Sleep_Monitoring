@@ -178,7 +178,7 @@ export default function DeviceList() {
       {devices !== null && filteredDevices.length === 0 && (
         <p className="argus-muted-text">
           {summary.total === 0
-            ? "No radar monitors found in database."
+            ? "No Sensor monitors found in database."
             : "No monitors match your search query."}
         </p>
       )}

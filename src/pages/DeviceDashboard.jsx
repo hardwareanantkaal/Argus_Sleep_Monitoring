@@ -7,6 +7,7 @@ import ArgusHeader from "../components/ArgusHeader.jsx";
 import ArgusSleepGauge from "../components/ArgusSleepGauge.jsx";
 import ArgusVitalsMatrix from "../components/ArgusVitalsMatrix.jsx";
 import ArgusAnalytics from "../components/ArgusAnalytics.jsx";
+import DeviceSettingsPanel from "../components/DeviceSettingsPanel.jsx";
 import PlacementCheckModal from "../components/PlacementCheckModal.jsx";
 import { evaluateDeviceStatus, useTick } from "../utils/status.js";
 
@@ -64,7 +65,7 @@ export default function DeviceDashboard() {
 
   return (
     <div className="page argus-page">
-      {/* Header Bar with Config Mode & Placement Check Triggers */}
+      {/* Header Bar */}
       <ArgusHeader
         deviceName={info?.deviceName || "Argus Sleep Node"}
         deviceId={deviceId}
@@ -73,11 +74,9 @@ export default function DeviceDashboard() {
         rssi={info?.rssi}
         configMode={isConfigActive}
         showBack={true}
-        onOpenPlacementCheck={() => setIsPlacementOpen(true)}
-        onToggleConfigMode={handleToggleConfigMode}
       />
 
-      {/* Prominent Banner when Config Mode is Active (WiFi / OTA Firmware Mode) */}
+      {/* Prominent Banner when Config Mode is Active */}
       {isConfigActive && (
         <div className="argus-config-active-banner">
           <div className="config-banner-header">
@@ -93,11 +92,11 @@ export default function DeviceDashboard() {
               onClick={() => handleToggleConfigMode(false)}
               disabled={updatingConfig}
             >
-              {updatingConfig ? "Updating..." : "Exit WiFi/OTA Mode"}
+              {updatingConfig ? "Updating..." : "Exit Config Mode"}
             </button>
           </div>
           <p className="config-banner-desc">
-            This allows for WiFi setup or OTA firmware updates. In this mode, the sensor is inactive and will not record sleep data. To resume normal operation, exit Config Mode.
+            The device is currently set to <strong>configMode = true</strong> in Firebase. The ESP32 is ready for WiFi credential updates, Access Point pairing, or Over-The-Air (OTA) firmware updates.
           </p>
           <div className="config-meta-row">
             {info?.ip && <span>IP: <strong>{info.ip}</strong></span>}
@@ -123,6 +122,14 @@ export default function DeviceDashboard() {
       {/* Analytics & Diagnostic Section */}
       <ArgusAnalytics live={live} />
 
+      {/* Device Controls & Settings Section (Near Footer) */}
+      <DeviceSettingsPanel
+        configMode={isConfigActive}
+        onToggleConfigMode={handleToggleConfigMode}
+        onOpenPlacementCheck={() => setIsPlacementOpen(true)}
+        updatingConfig={updatingConfig}
+      />
+
       {/* Footer Specs */}
       <footer className="argus-footer">
         <span>Argus Node Sequence: #{live?.seq ?? 0}</span>
@@ -137,6 +144,7 @@ export default function DeviceDashboard() {
         isOpen={isPlacementOpen}
         onClose={() => setIsPlacementOpen(false)}
         live={live}
+        deviceId={deviceId}
       />
     </div>
   );
