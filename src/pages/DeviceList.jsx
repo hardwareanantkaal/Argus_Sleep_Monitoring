@@ -15,19 +15,58 @@ export default function DeviceList() {
 
   useEffect(() => {
     const devicesRef = ref(db, "devices");
-    const unsub = onValue(
+    const childListeners = new Map();
+
+    const mainUnsub = onValue(
       devicesRef,
       (snapshot) => {
         const data = snapshot.val() || {};
+        const deviceIds = Object.keys(data);
         setDevices(data);
 
-        const timestamp = Date.now();
-        setLastReceivedMap((prev) => {
-          const next = { ...prev };
-          Object.keys(data).forEach((id) => {
-            next[id] = timestamp;
-          });
-          return next;
+        // Remove listeners for devices that are no longer in the database
+        for (const [id, unsubFn] of childListeners.entries()) {
+          if (!deviceIds.includes(id)) {
+            unsubFn();
+            childListeners.delete(id);
+            setLastReceivedMap((prev) => {
+              const next = { ...prev };
+              delete next[id];
+              return next;
+            });
+          }
+        }
+
+        // Attach a separate listener for each device path: /devices/${id}
+        deviceIds.forEach((id) => {
+          if (!childListeners.has(id)) {
+            let isInitial = true;
+            const singleDeviceRef = ref(db, `devices/${id}`);
+            const unsubDevice = onValue(
+              singleDeviceRef,
+              (deviceSnap) => {
+                const singleData = deviceSnap.val();
+                setDevices((prev) => ({
+                  ...prev,
+                  [id]: singleData,
+                }));
+
+                // Only update lastReceivedMap for THIS specific device when it emits a real-time update
+                if (!isInitial) {
+                  setLastReceivedMap((prev) => ({
+                    ...prev,
+                    [id]: Date.now(),
+                  }));
+                } else {
+                  isInitial = false;
+                }
+              },
+              (err) => {
+                console.error(`Failed to read /devices/${id}:`, err);
+              }
+            );
+            childListeners.set(id, unsubDevice);
+          }
         });
       },
       (err) => {
@@ -35,7 +74,14 @@ export default function DeviceList() {
         setDevices({});
       }
     );
-    return () => unsub();
+
+    return () => {
+      mainUnsub();
+      for (const unsubFn of childListeners.values()) {
+        unsubFn();
+      }
+      childListeners.clear();
+    };
   }, []);
 
   const evaluatedDevices = useMemo(() => {
