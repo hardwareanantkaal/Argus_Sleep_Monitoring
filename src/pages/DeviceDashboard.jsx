@@ -1,100 +1,143 @@
 import { useEffect, useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { useParams } from "react-router-dom";
 import { db } from "../firebase.js";
-import { ref, onValue } from "firebase/database";
-import StatCard from "../components/StatCard.jsx";
+import { ref, onValue, set } from "firebase/database";
 
-const SLEEP_STATE = ["Deep", "Light", "Awake", "No session"];
-const MOTION_STATE = ["None", "Still", "Active"];
+import ArgusHeader from "../components/ArgusHeader.jsx";
+import ArgusSleepGauge from "../components/ArgusSleepGauge.jsx";
+import ArgusVitalsMatrix from "../components/ArgusVitalsMatrix.jsx";
+import ArgusAnalytics from "../components/ArgusAnalytics.jsx";
+import PlacementCheckModal from "../components/PlacementCheckModal.jsx";
+import { evaluateDeviceStatus, useTick } from "../utils/status.js";
 
 export default function DeviceDashboard() {
   const { deviceId } = useParams();
   const [info, setInfo] = useState(null);
   const [live, setLive] = useState(null);
+  const [lastReceivedAt, setLastReceivedAt] = useState(null);
+  const [isPlacementOpen, setIsPlacementOpen] = useState(false);
+  const [updatingConfig, setUpdatingConfig] = useState(false);
+
+  const nowMs = useTick(1000);
 
   useEffect(() => {
     const infoRef = ref(db, `devices/${deviceId}/info`);
     const liveRef = ref(db, `devices/${deviceId}/live`);
-    const unsubInfo = onValue(infoRef, (snap) => setInfo(snap.val()));
-    const unsubLive = onValue(liveRef, (snap) => setLive(snap.val()));
+
+    const unsubInfo = onValue(infoRef, (snap) => {
+      setInfo(snap.val());
+      setLastReceivedAt(Date.now());
+    });
+
+    const unsubLive = onValue(liveRef, (snap) => {
+      setLive(snap.val());
+      setLastReceivedAt(Date.now());
+    });
+
     return () => {
       unsubInfo();
       unsubLive();
     };
   }, [deviceId]);
 
-  const nowSec = Math.floor(Date.now() / 1000);
-  const online =
-    info && typeof info.lastSeen === "number" && nowSec - info.lastSeen < 90;
+  const status = evaluateDeviceStatus({
+    info,
+    live,
+    lastReceivedAt,
+    nowMs,
+  });
+
+  const handleToggleConfigMode = async (newVal) => {
+    try {
+      setUpdatingConfig(true);
+      const configRef = ref(db, `devices/${deviceId}/info/configMode`);
+      await set(configRef, newVal);
+    } catch (err) {
+      console.error("Failed to update configMode in Firebase:", err);
+      alert("Failed to update Config Mode in Firebase. Please check Database rules.");
+    } finally {
+      setUpdatingConfig(false);
+    }
+  };
+
+  const isConfigActive = Boolean(info?.configMode);
 
   return (
-    <div className="page">
-      <header className="page-header">
-        <Link to="/" className="back-link">
-          &larr; All devices
-        </Link>
-        <h1>{info?.deviceName || "Argus Sleep Monitoring"}</h1>
-        <p className="subtitle">
-          {deviceId} &middot;{" "}
-          <span className={online ? "status-online-text" : "status-offline-text"}>
-            {online ? "Online" : "Offline"}
-          </span>
-        </p>
-      </header>
+    <div className="page argus-page">
+      {/* Header Bar with Config Mode & Placement Check Triggers */}
+      <ArgusHeader
+        deviceName={info?.deviceName || "Argus Sleep Node"}
+        deviceId={deviceId}
+        online={status.online}
+        lastSeenText={status.lastSeenText}
+        rssi={info?.rssi}
+        configMode={isConfigActive}
+        showBack={true}
+        onOpenPlacementCheck={() => setIsPlacementOpen(true)}
+        onToggleConfigMode={handleToggleConfigMode}
+      />
 
-      {!live && <p className="muted">Waiting for live data…</p>}
-
-      {live && (
-        <>
-          <section className="stat-grid">
-            <StatCard label="Presence" value={live.presence ? "Detected" : "None"} />
-            <StatCard
-              label="Motion"
-              value={MOTION_STATE[live.motion] ?? "—"}
-            />
-            <StatCard label="Distance" value={`${live.distance ?? "—"} cm`} />
-            <StatCard label="Heart rate" value={`${live.heartRate ?? "—"} bpm`} />
-            <StatCard label="Breath rate" value={`${live.breathRate ?? "—"} rpm`} />
-            <StatCard label="In bed" value={live.inBed ? "Yes" : "No"} />
-            <StatCard
-              label="Sleep state"
-              value={SLEEP_STATE[live.sleepState] ?? "—"}
-            />
-            <StatCard label="Quality" value={live.quality ?? "—"} />
-          </section>
-
-          <section className="stat-section">
-            <h2>Composite (rolling averages)</h2>
-            <div className="stat-grid">
-              <StatCard label="Avg respiration" value={live.cResp ?? "—"} />
-              <StatCard label="Avg heartbeat" value={live.cHeart ?? "—"} />
-              <StatCard label="Turnovers" value={live.cTurn ?? "—"} />
-              <StatCard label="Large movement" value={live.cLarge ?? "—"} />
-              <StatCard label="Minor movement" value={live.cMinor ?? "—"} />
-              <StatCard label="Apnea events" value={live.cApnea ?? "—"} />
+      {/* Prominent Banner when Config Mode is Active (WiFi / OTA Firmware Mode) */}
+      {isConfigActive && (
+        <div className="argus-config-active-banner">
+          <div className="config-banner-header">
+            <div className="config-banner-title">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" strokeWidth="2.2">
+                <circle cx="12" cy="12" r="3" />
+                <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z" />
+              </svg>
+              <span>CONFIG MODE ACTIVE (WiFi / OTA Update Mode)</span>
             </div>
-          </section>
-
-          <section className="stat-section">
-            <h2>Nightly statistics</h2>
-            <div className="stat-grid">
-              <StatCard label="Sleep score" value={live.sScore ?? "—"} />
-              <StatCard label="Sleep time" value={`${live.sSleepTime ?? "—"} min`} />
-              <StatCard label="Deep %" value={live.sDeep ?? "—"} />
-              <StatCard label="Shallow %" value={live.sShallow ?? "—"} />
-              <StatCard label="Out of bed" value={`${live.sOOB ?? "—"} min`} />
-              <StatCard label="Exits" value={live.sExit ?? "—"} />
-            </div>
-          </section>
-
-          <footer className="footer-meta">
-            <span>Radar link: {live.radarOk ? "OK" : "Down"}</span>
-            <span>Seq: {live.seq ?? "—"}</span>
-            {info?.rssi !== undefined && <span>Signal: {info.rssi} dBm</span>}
-            {info?.ip && <span>IP: {info.ip}</span>}
-          </footer>
-        </>
+            <button
+              className="config-exit-btn"
+              onClick={() => handleToggleConfigMode(false)}
+              disabled={updatingConfig}
+            >
+              {updatingConfig ? "Updating..." : "Exit WiFi/OTA Mode"}
+            </button>
+          </div>
+          <p className="config-banner-desc">
+            This allows for WiFi setup or OTA firmware updates. In this mode, the sensor is inactive and will not record sleep data. To resume normal operation, exit Config Mode.
+          </p>
+          <div className="config-meta-row">
+            {info?.ip && <span>IP: <strong>{info.ip}</strong></span>}
+            {info?.fw && <span>Firmware: <strong>v{info.fw}</strong></span>}
+            {info?.timeStr && <span>Device Time: <strong>{info.timeStr}</strong></span>}
+          </div>
+        </div>
       )}
+
+      {/* Main Hero Vitals Matrix */}
+      <ArgusVitalsMatrix live={live} online={status.online} />
+
+      {/* Sleep Quality Index & Radial Gauge Section */}
+      <div className="dashboard-row-gauge">
+        <ArgusSleepGauge
+          score={live?.sScore}
+          quality={live?.quality}
+          deepPct={live?.sDeep}
+          sleepTimeMin={live?.sSleepTime}
+        />
+      </div>
+
+      {/* Analytics & Diagnostic Section */}
+      <ArgusAnalytics live={live} />
+
+      {/* Footer Specs */}
+      <footer className="argus-footer">
+        <span>Argus Node Sequence: #{live?.seq ?? 0}</span>
+        {info?.ip && <span>IP: {info.ip}</span>}
+        {info?.fw && <span>FW: v{info.fw}</span>}
+        <span>Config Mode: {isConfigActive ? "ACTIVE (true)" : "DISABLED (false)"}</span>
+        <span>Radar Link: {live?.radarOk ? "HEALTHY" : "DOWN"}</span>
+      </footer>
+
+      {/* Placement Check & Signal Calibration Modal */}
+      <PlacementCheckModal
+        isOpen={isPlacementOpen}
+        onClose={() => setIsPlacementOpen(false)}
+        live={live}
+      />
     </div>
   );
 }

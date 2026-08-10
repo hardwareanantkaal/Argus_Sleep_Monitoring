@@ -1,8 +1,13 @@
-export default function StatCard({ label, value }) {
+import React from "react";
+
+export default function StatCard({ label, value, subText, accentColor = "indigo" }) {
   return (
-    <div className="stat-card">
-      <div className="stat-value">{value}</div>
-      <div className="stat-label">{label}</div>
+    <div className={`cyber-stat-card accent-${accentColor}`}>
+      <div className="stat-label-row">
+        <span className="stat-label-text">{label}</span>
+      </div>
+      <div className="stat-value-text">{value ?? "—"}</div>
+      {subText && <div className="stat-sub-text">{subText}</div>}
     </div>
   );
 }
