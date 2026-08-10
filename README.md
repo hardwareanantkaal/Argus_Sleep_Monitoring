@@ -20,7 +20,7 @@ No login/auth — reads directly from Firebase RTDB with public read rules.
      "rules": {
        "devices": {
          ".read": true,
-         ".write": false
+         ".write": true
        }
      }
    }
