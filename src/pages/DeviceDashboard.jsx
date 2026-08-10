@@ -25,14 +25,25 @@ export default function DeviceDashboard() {
     const infoRef = ref(db, `devices/${deviceId}/info`);
     const liveRef = ref(db, `devices/${deviceId}/live`);
 
+    let isInitialInfo = true;
+    let isInitialLive = true;
+
     const unsubInfo = onValue(infoRef, (snap) => {
       setInfo(snap.val());
-      setLastReceivedAt(Date.now());
+      if (!isInitialInfo) {
+        setLastReceivedAt(Date.now());
+      } else {
+        isInitialInfo = false;
+      }
     });
 
     const unsubLive = onValue(liveRef, (snap) => {
       setLive(snap.val());
-      setLastReceivedAt(Date.now());
+      if (!isInitialLive) {
+        setLastReceivedAt(Date.now());
+      } else {
+        isInitialLive = false;
+      }
     });
 
     return () => {
