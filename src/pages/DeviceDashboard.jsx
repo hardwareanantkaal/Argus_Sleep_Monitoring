@@ -26,10 +26,6 @@ export default function DeviceDashboard() {
   useEffect(() => {
     const infoRef = ref(db, `devices/${deviceId}/info`);
     const liveRef = ref(db, `devices/${deviceId}/live`);
-    const historyRef = ref(db, `devices/${deviceId}/history`);
-
-    let isInitialInfo = true;
-    let isInitialLive = true;
 
     const unsubInfo = onValue(infoRef, (snap) => {
       setInfo(snap.val());
@@ -42,15 +38,7 @@ export default function DeviceDashboard() {
 
     const unsubLive = onValue(liveRef, (snap) => {
       setLive(snap.val());
-      if (!isInitialLive) {
-        setLastReceivedAt(Date.now());
-      } else {
-        isInitialLive = false;
-      }
-    });
-
-    const unsubHistory = onValue(historyRef, (snap) => {
-      setHistory(snap.val());
+      setLastReceivedAt(Date.now());
     });
 
     return () => {
