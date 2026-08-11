@@ -144,7 +144,7 @@ export default function DeviceList() {
   return (
     <div className="page argus-page">
       <ArgusHeader
-        deviceName="Argus Command Network"
+        deviceName="Argus Sleep Monitoring"
         deviceId="MONITOR HUB"
         online={summary.online > 0}
         lastSeenText={`${summary.online} Online Streams`}
