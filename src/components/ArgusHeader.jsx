@@ -46,7 +46,7 @@ export default function ArgusHeader({
           <div className="argus-brand-text">
             <h1 className="argus-app-title">{deviceName || "Argus Sleep Monitor"}</h1>
             <span className="argus-app-tagline">
-              {deviceId ? `NODE · ${deviceId}` : "60GHz RADAR TELEMETRY"}
+              {deviceId ? `NODE · ${deviceId}` : ""}
             </span>
           </div>
         </div>

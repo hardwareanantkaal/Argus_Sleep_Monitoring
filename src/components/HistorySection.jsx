@@ -2,18 +2,37 @@ import React, { useState } from "react";
 import { db } from "../firebase.js";
 import { ref, remove } from "firebase/database";
 import SleepStageChart from "./SleepStageChart.jsx";
+import { getDeviceTimestampMs } from "../utils/status.js";
+
+function parseSessionTimeToMs(timeStr) {
+  if (timeStr === undefined || timeStr === null || timeStr === "") return null;
+  const fakeLive = { timeStr };
+  return getDeviceTimestampMs(null, fakeLive);
+}
+
+function isSessionInProgress(session, nowMs = Date.now()) {
+  if (!session) return false;
+  const fbFlag = Boolean(session.inProgress);
+  const endMs = parseSessionTimeToMs(session.endTime);
+  if (endMs !== null && endMs < nowMs) {
+    return false;
+  }
+  return fbFlag;
+}
 
 export default function HistorySection({ deviceId, history }) {
   const [isDeleting, setIsDeleting] = useState(false);
 
   const sessionEntries = history && typeof history === "object" ? Object.entries(history) : [];
 
-  // Sort sessions with active/recent sessions first
+  // Sort sessions with active/recent sessions first (use effective inProgress)
   const sortedSessions = sessionEntries.sort((a, b) => {
     const aVal = a[1] || {};
     const bVal = b[1] || {};
-    if (aVal.inProgress && !bVal.inProgress) return -1;
-    if (!aVal.inProgress && bVal.inProgress) return 1;
+    const aLive = isSessionInProgress(aVal);
+    const bLive = isSessionInProgress(bVal);
+    if (aLive && !bLive) return -1;
+    if (!aLive && bLive) return 1;
     return b[0].localeCompare(a[0]);
   });
 
@@ -48,6 +67,78 @@ export default function HistorySection({ deviceId, history }) {
     }
   };
 
+  const csvEscape = (val) => {
+    if (val === undefined || val === null) return "";
+    const s = String(val);
+    if (s.includes(",") || s.includes('"') || s.includes("\n") || s.includes("\r")) {
+      return `"${s.replace(/"/g, '""')}"`;
+    }
+    return s;
+  };
+
+  const buildSessionCsv = (sessionId, session) => {
+    const lines = [];
+
+    const summaryFields = [
+      ["Session ID", sessionId],
+      ["Device ID", deviceId ?? ""],
+      ["Status", isSessionInProgress(session) ? "LIVE IN PROGRESS" : "COMPLETED"],
+      ["Start Time", session?.startTime ?? ""],
+      ["End Time", session?.endTime ?? ""],
+      ["Score", session?.score ?? 0],
+      ["Asleep (min)", session?.sleepMin ?? 0],
+      ["In Bed (min)", session?.bedMin ?? 0],
+      ["Sleep Onset (min)", session?.onsetMin ?? 0],
+      ["Deep Sleep (min)", session?.deepMin ?? 0],
+      ["Deep %", session?.deepPct ?? 0],
+      ["Light Sleep (min)", session?.lightMin ?? 0],
+      ["Light %", session?.lightPct ?? 0],
+      ["Awakenings", session?.wakes ?? 0],
+      ["Turnovers", session?.turns ?? 0],
+      ["Apnea Events", session?.apnea ?? 0],
+      ["Avg Heart Rate (BPM)", session?.avgHR ?? 0],
+      ["Avg Respiration (RPM)", session?.avgBR ?? 0],
+      ["Exported At", new Date().toLocaleString()],
+    ];
+
+    lines.push(["=== Argus Sleep Session Summary (one row: headers above, values below) ==="]);
+    lines.push(summaryFields.map(([k]) => csvEscape(k)));
+    lines.push(summaryFields.map(([, v]) => csvEscape(v)));
+    lines.push([]);
+    lines.push([]);
+
+    lines.push(["=== Sleep Stage Timeline (each row = one stage transition) ==="]);
+    lines.push(["Time", "Sleep Stage"]);
+    if (session?.sleepTimeline && typeof session.sleepTimeline === "object") {
+      Object.entries(session.sleepTimeline)
+        .sort((a, b) => a[0].localeCompare(b[0]))
+        .forEach(([t, stage]) => {
+          lines.push([csvEscape(t), csvEscape(stage)]);
+        });
+    } else {
+      lines.push(["(no timeline data)", ""]);
+    }
+
+    return lines.map((row) => (Array.isArray(row) ? row.join(",") : row)).join("\r\n");
+  };
+
+  const handleDownloadCsv = (sessionId, session) => {
+    if (!sessionId || !session) return;
+    const csv = buildSessionCsv(sessionId, session);
+    const bom = "\uFEFF";
+    const blob = new Blob([bom + csv], { type: "text/csv;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    const safeDev = String(deviceId ?? "unknownDevice").replace(/[^\w.-]+/g, "_");
+    const safeSes = String(sessionId).replace(/[^\w.-]+/g, "_");
+    a.href = url;
+    a.download = `Argus-${safeDev}-${safeSes}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  };
+
   return (
     <section className="dashboard-section history-section" style={{ marginTop: "36px" }}>
       <div className="section-header-row">
@@ -70,7 +161,7 @@ export default function HistorySection({ deviceId, history }) {
           <div className="history-tabs-row" style={{ display: "flex", gap: "10px", overflowX: "auto", paddingBottom: "12px", marginBottom: "20px" }}>
             {sortedSessions.map(([id, session]) => {
               const isActive = id === activeSessionId;
-              const inProgress = Boolean(session?.inProgress);
+              const inProgress = isSessionInProgress(session);
               return (
                 <button
                   key={id}
@@ -116,9 +207,40 @@ export default function HistorySection({ deviceId, history }) {
                     <h3 style={{ fontSize: "18px", fontWeight: "800", color: "var(--text-main)" }}>
                       Session: {activeSessionId}
                     </h3>
-                    <span className={`argus-chip-small ${activeSession.inProgress ? "green-chip" : "muted-chip"}`}>
-                      {activeSession.inProgress ? "LIVE IN PROGRESS" : "COMPLETED SESSION"}
-                    </span>
+                    {(() => {
+                      const liveNow = isSessionInProgress(activeSession);
+                      return (
+                        <span className={`argus-chip-small ${liveNow ? "green-chip" : "muted-chip"}`}>
+                          {liveNow ? "LIVE IN PROGRESS" : "COMPLETED SESSION"}
+                        </span>
+                      );
+                    })()}
+                    {/* Download CSV Button */}
+                    <button
+                      type="button"
+                      onClick={() => handleDownloadCsv(activeSessionId, activeSession)}
+                      style={{
+                        display: "inline-flex",
+                        alignItems: "center",
+                        gap: "6px",
+                        padding: "6px 12px",
+                        borderRadius: "10px",
+                        background: "rgba(16, 185, 129, 0.15)",
+                        border: "1px solid rgba(16, 185, 129, 0.3)",
+                        color: "#10b981",
+                        fontSize: "12px",
+                        fontWeight: "700",
+                        cursor: "pointer",
+                        transition: "all 0.2s ease",
+                      }}
+                    >
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
+                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                        <polyline points="7 10 12 15 17 10" />
+                        <line x1="12" y1="15" x2="12" y2="3" />
+                      </svg>
+                      <span>Download CSV</span>
+                    </button>
                     {/* Delete / Remove Session Button */}
                     <button
                       type="button"
