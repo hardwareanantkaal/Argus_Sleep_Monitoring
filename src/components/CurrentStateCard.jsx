@@ -1,19 +1,17 @@
 import React from "react";
-
-const SLEEP_STATE_SHORT = ["Deep", "Light", "Awake", "Up"];
-const MOTION_STATE = ["None", "Still", "Active"];
+import {
+  formatSleepState,
+  formatInBed,
+  formatPresence,
+  formatMovement,
+} from "../utils/argusEnums.js";
 
 export default function CurrentStateCard({ presence, inBed, motion, sleepState }) {
-  // Determine current stage pill
-  let stageLabel = "Up";
-  if (inBed) {
-    stageLabel = SLEEP_STATE_SHORT[sleepState] ?? "In Bed";
-  }
-
-  const presenceText = presence ? "Present" : "None";
-  const bedText = inBed ? "In" : "Out";
-  const motionText = MOTION_STATE[motion] ?? "None";
-  const sessionText = inBed || sleepState < 3 ? "Active" : "—";
+  const stageLabel = formatSleepState(sleepState);
+  const presenceText = formatPresence(presence);
+  const bedText = formatInBed(inBed);
+  const movementVal = formatMovement(motion);
+  const sessionText = formatInBed(inBed) === "In bed" || (typeof sleepState === "number" && sleepState < 3) ? "Active" : "—";
 
   return (
     <div className="card-box current-state-box">
@@ -35,8 +33,8 @@ export default function CurrentStateCard({ presence, inBed, motion, sleepState }
           <span className="state-val">{bedText}</span>
         </div>
         <div className="state-row">
-          <span className="state-lbl">Motion</span>
-          <span className="state-val">{motionText}</span>
+          <span className="state-lbl">Movement</span>
+          <span className="state-val">{movementVal}</span>
         </div>
         <div className="state-row no-border">
           <span className="state-lbl">Session</span>
@@ -46,3 +44,4 @@ export default function CurrentStateCard({ presence, inBed, motion, sleepState }
     </div>
   );
 }
+

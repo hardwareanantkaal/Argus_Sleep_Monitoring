@@ -1,13 +1,30 @@
 import React from "react";
+import { getNightlyData } from "../utils/argusEnums.js";
 
 export default function TonightSection({ live }) {
-  const inBedMin = live?.sOOB ?? 0;
-  const asleepMin = live?.sSleepTime ?? 0;
-  const deepMin = live?.sDeep ?? 0;
-  const lightMin = live?.sShallow ?? 0;
+  const nightly = getNightlyData(live);
 
-  const exitCount = live?.sExit ?? 0;
-  const turnovers = live?.cTurn ?? 0;
+  const {
+    sApnea,
+    sDeep,
+    sExit,
+    sHeart,
+    sOOB,
+    sResp,
+    sScore,
+    sShallow,
+    sSleepTime,
+    sTurn,
+    sWake,
+  } = nightly;
+
+  const inBedMin = sOOB;
+  const asleepMin = sSleepTime;
+  const deepMin = sDeep;
+  const lightMin = sShallow;
+
+  const exitCount = sExit;
+  const turnovers = sTurn;
 
   const isTracking = live?.inBed || live?.sleepState < 3;
 
@@ -24,7 +41,7 @@ export default function TonightSection({ live }) {
       {/* Top 4 Metric Cards */}
       <div className="tonight-cards-row">
         <div className="small-metric-card">
-          <span className="small-card-lbl">IN BED</span>
+          <span className="small-card-lbl">OUT OF BED</span>
           <div className="small-card-val-group">
             <span className="small-card-num">{inBedMin}</span>
             <span className="small-card-unit">min</span>
@@ -43,7 +60,7 @@ export default function TonightSection({ live }) {
           <span className="small-card-lbl">DEEP</span>
           <div className="small-card-val-group">
             <span className="small-card-num purple-text">{deepMin}</span>
-            <span className="small-card-unit">min</span>
+            <span className="small-card-unit">%</span>
           </div>
         </div>
 
@@ -51,7 +68,7 @@ export default function TonightSection({ live }) {
           <span className="small-card-lbl">LIGHT</span>
           <div className="small-card-val-group">
             <span className="small-card-num cyan-text">{lightMin}</span>
-            <span className="small-card-unit">min</span>
+            <span className="small-card-unit">%</span>
           </div>
         </div>
       </div>
@@ -61,15 +78,15 @@ export default function TonightSection({ live }) {
         {/* Left List Card */}
         <div className="card-box tonight-left-card">
           <div className="state-row">
-            <span className="state-lbl">Fell asleep after</span>
-            <span className="state-val">{asleepMin > 0 ? "5 min" : "-"}</span>
+            <span className="state-lbl">Awake duration (sWake)</span>
+            <span className="state-val">{sWake} min</span>
           </div>
           <div className="state-row">
-            <span className="state-lbl">Awakenings</span>
+            <span className="state-lbl">Awakenings (sExit)</span>
             <span className="state-val">{exitCount}</span>
           </div>
           <div className="state-row no-border">
-            <span className="state-lbl">Turnovers</span>
+            <span className="state-lbl">Turnovers (sTurn)</span>
             <span className="state-val">{turnovers}</span>
           </div>
         </div>
@@ -86,3 +103,4 @@ export default function TonightSection({ live }) {
     </div>
   );
 }
+

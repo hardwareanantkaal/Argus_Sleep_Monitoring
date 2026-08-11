@@ -4,6 +4,7 @@ import { db } from "../firebase.js";
 import { ref, onValue } from "firebase/database";
 import ArgusHeader from "../components/ArgusHeader.jsx";
 import { evaluateDeviceStatus, useTick } from "../utils/status.js";
+import { formatInBed, formatPresence, getEffectiveLiveStage, formatMovement } from "../utils/argusEnums.js";
 
 export default function DeviceList() {
   const [devices, setDevices] = useState(null);
@@ -15,19 +16,58 @@ export default function DeviceList() {
 
   useEffect(() => {
     const devicesRef = ref(db, "devices");
-    const unsub = onValue(
+    const childListeners = new Map();
+
+    const mainUnsub = onValue(
       devicesRef,
       (snapshot) => {
         const data = snapshot.val() || {};
+        const deviceIds = Object.keys(data);
         setDevices(data);
 
-        const timestamp = Date.now();
-        setLastReceivedMap((prev) => {
-          const next = { ...prev };
-          Object.keys(data).forEach((id) => {
-            next[id] = timestamp;
-          });
-          return next;
+        // Remove listeners for devices that are no longer in the database
+        for (const [id, unsubFn] of childListeners.entries()) {
+          if (!deviceIds.includes(id)) {
+            unsubFn();
+            childListeners.delete(id);
+            setLastReceivedMap((prev) => {
+              const next = { ...prev };
+              delete next[id];
+              return next;
+            });
+          }
+        }
+
+        // Attach a separate listener for each device path: /devices/${id}
+        deviceIds.forEach((id) => {
+          if (!childListeners.has(id)) {
+            let isInitial = true;
+            const singleDeviceRef = ref(db, `devices/${id}`);
+            const unsubDevice = onValue(
+              singleDeviceRef,
+              (deviceSnap) => {
+                const singleData = deviceSnap.val();
+                setDevices((prev) => ({
+                  ...prev,
+                  [id]: singleData,
+                }));
+
+                // Only update lastReceivedMap for THIS specific device when it emits a real-time update
+                if (!isInitial) {
+                  setLastReceivedMap((prev) => ({
+                    ...prev,
+                    [id]: Date.now(),
+                  }));
+                } else {
+                  isInitial = false;
+                }
+              },
+              (err) => {
+                console.error(`Failed to read /devices/${id}:`, err);
+              }
+            );
+            childListeners.set(id, unsubDevice);
+          }
         });
       },
       (err) => {
@@ -35,7 +75,14 @@ export default function DeviceList() {
         setDevices({});
       }
     );
-    return () => unsub();
+
+    return () => {
+      mainUnsub();
+      for (const unsubFn of childListeners.values()) {
+        unsubFn();
+      }
+      childListeners.clear();
+    };
   }, []);
 
   const evaluatedDevices = useMemo(() => {
@@ -185,56 +232,69 @@ export default function DeviceList() {
 
       {/* Device Cards Grid */}
       <div className="argus-devices-grid">
-        {filteredDevices.map(({ id, info, live, status }) => (
-          <Link to={`/device/${id}`} key={id} className="argus-device-card">
-            <div className="card-top-header">
-              <span className="device-card-name">{info.deviceName || "Argus Monitor Node"}</span>
-              <div className="card-badges-row">
-                {info.configMode && (
-                  <span className="argus-chip-small amber-chip" title="Device in Config / OTA Mode">
-                    CONFIG MODE
+        {filteredDevices.map(({ id, info, live, status }) => {
+          const inBedStr = formatInBed(live.inBed);
+          const presenceStr = formatPresence(live.presence);
+          
+          const effectiveStage = getEffectiveLiveStage(live);
+          const sleepStageStr = effectiveStage.stage;
+          
+          const rawMotion = formatMovement(live.motion ?? live.movement);
+          const motionText = rawMotion === 2 ? "Active" : rawMotion === 1 ? "Still" : "None";
+
+          return (
+            <Link to={`/device/${id}`} key={id} className="argus-device-card">
+              <div className="card-top-header">
+                <span className="device-card-name">{info.deviceName || "Argus Monitor Node"}</span>
+                <div className="card-badges-row">
+                  {info.configMode && (
+                    <span className="argus-chip-small amber-chip" title="Device in Config / OTA Mode">
+                      CONFIG MODE
+                    </span>
+                  )}
+                  <span className={`argus-chip-small ${status.online ? "green-chip" : "muted-chip"}`}>
+                    {status.online ? "LIVE" : "OFFLINE"}
                   </span>
-                )}
-                <span className={`argus-chip-small ${status.online ? "green-chip" : "muted-chip"}`}>
-                  {status.online ? "LIVE" : "OFFLINE"}
-                </span>
-              </div>
-            </div>
-
-            <div className="device-card-id">{id}</div>
-
-            <div className="device-card-body-grid">
-              <div className="card-stat-box">
-                <span className="stat-lbl">Occupancy</span>
-                <span className="stat-val" style={{ color: live.inBed ? "#10b981" : "#94a3b8" }}>
-                  {live.inBed ? "In Bed" : "Out"}
-                </span>
+                </div>
               </div>
 
-              <div className="card-stat-box">
-                <span className="stat-lbl">Firmware</span>
-                <span className="stat-val amber-text">
-                  {info.fw ? `v${info.fw}` : "—"}
-                </span>
-              </div>
+              <div className="device-card-id">{id}</div>
 
-              <div className="card-stat-box">
-                <span className="stat-lbl">IP Address</span>
-                <span className="stat-val">
-                  {info.ip || "—"}
-                </span>
-              </div>
+              <div className="device-card-body-grid">
+                <div className="card-stat-box">
+                  <span className="stat-lbl">Occupancy</span>
+                  <span className="stat-val" style={{ color: inBedStr === "In bed" ? "#10b981" : "#94a3b8" }}>
+                    {inBedStr}
+                  </span>
+                </div>
 
-              <div className="card-stat-box">
-                <span className="stat-lbl">Signal Status</span>
-                <span className="stat-val" style={{ fontSize: "12px", color: status.online ? "#10b981" : "#94a3b8" }}>
-                  {status.online ? status.lastSeenText : `Offline (${status.lastSeenText})`}
-                </span>
+                <div className="card-stat-box">
+                  <span className="stat-lbl">Presence</span>
+                  <span className="stat-val" style={{ color: presenceStr === "Someone is present" ? "#10b981" : "#94a3b8" }}>
+                    {presenceStr === "Someone is present" ? "Present" : "No one"}
+                  </span>
+                </div>
+
+                <div className="card-stat-box">
+                  <span className="stat-lbl">Sleep Stage</span>
+                  <span className="stat-val purple-text">
+                    {sleepStageStr}
+                  </span>
+                </div>
+
+                <div className="card-stat-box">
+                  <span className="stat-lbl">Movement</span>
+                  <span className="stat-val amber-text">
+                    {motionText}
+                  </span>
+                </div>
               </div>
-            </div>
-          </Link>
-        ))}
+            </Link>
+          );
+        })}
       </div>
     </div>
   );
 }
+
+

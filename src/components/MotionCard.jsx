@@ -1,19 +1,8 @@
 import React from "react";
-
-const MOTION_STATE = ["None", "Still", "Active"];
+import { formatMovement } from "../utils/argusEnums.js";
 
 export default function MotionCard({ motion, distance, cTurn, cLarge, cMinor }) {
-  const motionLabel = MOTION_STATE[motion] ?? "—";
-
-  let badgeText = "No Motion";
-  let badgeColor = "#64748b"; // slate
-  if (motion === 1) {
-    badgeText = "Micro-Motion";
-    badgeColor = "#38bdf8"; // cyan
-  } else if (motion === 2) {
-    badgeText = "Active Body Movement";
-    badgeColor = "#fbbf24"; // amber
-  }
+  const movementVal = formatMovement(motion);
 
   return (
     <div className="vital-hero-card theme-amber motion-card">
@@ -24,16 +13,16 @@ export default function MotionCard({ motion, distance, cTurn, cLarge, cMinor }) 
               <polyline points="22 12 18 12 15 21 9 3 6 12 2 12" />
             </svg>
           </div>
-          <span className="vital-card-title">Motion State</span>
+          <span className="vital-card-title">Movement State</span>
         </div>
-        <span className="vital-status-pill" style={{ borderColor: badgeColor, color: badgeColor }}>
-          {badgeText}
+        <span className="vital-status-pill" style={{ borderColor: "#f59e0b", color: "#f59e0b" }}>
+          Level {movementVal}
         </span>
       </div>
 
       <div className="vital-card-body">
         <div className="vital-value-group">
-          <span className="vital-main-value">{motionLabel}</span>
+          <span className="vital-main-value" style={{ fontSize: "40px", fontWeight: "800" }}>{movementVal}</span>
         </div>
       </div>
 
@@ -58,3 +47,4 @@ export default function MotionCard({ motion, distance, cTurn, cLarge, cMinor }) 
     </div>
   );
 }
+

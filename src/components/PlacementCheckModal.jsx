@@ -1,53 +1,89 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { db } from "../firebase.js";
 import { ref, set } from "firebase/database";
+import { formatPresence } from "../utils/argusEnums.js";
 
 export default function PlacementCheckModal({ isOpen, onClose, live, deviceId }) {
-  const [calibrating, setCalibrating] = useState(false);
+  const [calibState, setCalibState] = useState("idle"); // 'idle' | 'initiating' | 'resetting'
   const [activeTip, setActiveTip] = useState(null); // index of clicked tip
+
+  // Resetting phase timer (all 4 fields unchecked for 40s during reset)
+  useEffect(() => {
+    let timer = null;
+    if (calibState === "resetting") {
+      timer = setTimeout(() => {
+        setCalibState("idle"); // Recalibration complete! Restore live data checks
+      }, 40000); // 40s baseline reset window
+    }
+    return () => {
+      if (timer) clearTimeout(timer);
+    };
+  }, [calibState]);
 
   if (!isOpen) return null;
 
+  const isInitiating = calibState === "initiating";
+  const isResetting = calibState === "resetting";
+  const isBusy = isInitiating || isResetting;
+
   // Basic live condition checks
-  const hasPresence = Boolean(live?.presence);
-  const isStill = live ? live.motion !== 2 : false; // 0 = None, 1 = Still, 2 = Active
+  const presenceStr = formatPresence(live?.presence);
+  const hasPresence = presenceStr === "Someone is present";
+  
+  // Holding Still condition: movingRange <= 25
+  const movingRange = Number(live?.movingRange ?? 0);
+  const isStill = movingRange <= 25;
+  
   const hasBreath = Boolean(live?.breathRate && live.breathRate > 0);
   const hasHeart = Boolean(live?.heartRate && live.heartRate > 0);
 
-  // Condition checklist configuration
+  // Condition checklist configuration (all false during resetting phase)
   const checklistItems = [
     {
       id: "presence",
       label: "Presence detected",
-      passed: hasPresence,
-      explanation: "No target detected. Ensure you are lying in bed within 0.5–1.5 meters of the sensor.",
+      passed: isResetting ? false : hasPresence,
+      explanation: isResetting
+        ? "Hard resetting radar baseline signal..."
+        : "No target detected. Ensure you are lying in bed within 0.5–1.5 meters of the sensor.",
     },
     {
       id: "stillness",
       label: "Holding still",
-      passed: isStill,
-      explanation: "Active movement detected. Hold still for few seconds without moving your body.",
+      passed: isResetting ? false : isStill,
+      explanation: isResetting
+        ? "Recalibrating radar motion threshold..."
+        : "Active movement detected. Hold still for a few seconds without moving your body.",
     },
     {
       id: "breathing",
       label: "Breathing detected",
-      passed: hasBreath,
-      explanation: "Sensor searching for chest movement. Breathe steadily and ensure sensor is facing your chest.",
+      passed: isResetting ? false : hasBreath,
+      explanation: isResetting
+        ? "Re-aligning chest vibration lock..."
+        : "Sensor searching for chest movement. Breathe steadily and ensure sensor is facing your chest.",
     },
     {
       id: "heart",
       label: "Heart rate locked",
-      passed: hasHeart,
-      explanation: "Acquiring micro-cardiac rhythm. Remain calm and stay still within 0.8 meters for sensor signal lock.",
+      passed: isResetting ? false : hasHeart,
+      explanation: isResetting
+        ? "Locking onto micro-cardiac pulse..."
+        : "Acquiring micro-cardiac rhythm. Remain calm and stay still within 0.8 meters for sensor signal lock.",
     },
   ];
 
-  const metCount = checklistItems.filter((i) => i.passed).length;
+  const metCount = isResetting ? 0 : checklistItems.filter((i) => i.passed).length;
   const signalScore = metCount * 25;
+
 
   // Status guidance message
   let statusMessage = "No target — place sensor ~0.5–0.8 m away";
-  if (metCount === 4) {
+  if (isInitiating) {
+    statusMessage = "Sending recalibration command to sensor...";
+  } else if (isResetting) {
+    statusMessage = "Hard resetting sensor baseline... Please hold still.";
+  } else if (metCount === 4) {
     statusMessage = "Perfect spot — sensor fully locked!";
   } else if (metCount === 3) {
     statusMessage = "Almost — keep still, breathe slowly...";
@@ -60,22 +96,27 @@ export default function PlacementCheckModal({ isOpen, onClose, live, deviceId })
   // Gauge SVG calculations
   const radius = 48;
   const circumference = 2 * Math.PI * radius;
-  const progressOffset = circumference - (signalScore / 100) * circumference;
+  const progressOffset = isResetting
+    ? circumference
+    : circumference - (signalScore / 100) * circumference;
 
   const handleRecalibrate = async () => {
     try {
-      setCalibrating(true);
+      setCalibState("initiating");
+
       if (deviceId) {
         // Write recalibrate: true to Firebase RTDB under /devices/{deviceId}/info/recalibrate
         const recalibrateRef = ref(db, `devices/${deviceId}/info/recalibrate`);
         await set(recalibrateRef, true);
       }
+
+      // Wait 2.5 seconds before unchecking all fields for hard reset phase
+      setTimeout(() => {
+        setCalibState("resetting");
+      }, 2500);
     } catch (err) {
       console.error("Failed to send recalibrate command to Firebase:", err);
-    } finally {
-      setTimeout(() => {
-        setCalibrating(false);
-      }, 2500);
+      setCalibState("idle");
     }
   };
 
@@ -117,17 +158,22 @@ export default function PlacementCheckModal({ isOpen, onClose, live, deviceId })
               strokeDashoffset={progressOffset}
               strokeLinecap="round"
               transform="rotate(-90 65 65)"
+              style={{ transition: "stroke-dashoffset 0.8s ease" }}
             />
           </svg>
 
           <div className="placement-gauge-center">
-            <span className="placement-score-num">{calibrating ? "..." : signalScore}</span>
-            <span className="placement-score-lbl">SIGNAL</span>
+            <span className="placement-score-num">
+              {isResetting ? "..." : signalScore}
+            </span>
+            <span className="placement-score-lbl">
+              {isResetting ? "RESET" : "SIGNAL"}
+            </span>
           </div>
         </div>
 
         {/* Dynamic Status Message */}
-        <div className="placement-status-msg">{calibrating ? "Calibrating sensor beam..." : statusMessage}</div>
+        <div className="placement-status-msg">{statusMessage}</div>
 
         {/* Condition Checklist with Failure Explanations */}
         <div className="placement-checklist">
@@ -146,7 +192,7 @@ export default function PlacementCheckModal({ isOpen, onClose, live, deviceId })
                   ) : (
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
                       <circle cx="12" cy="12" r="10" />
-                      <line x1="12" y1="8" x2="12" y2="12" />
+                      <line x1="12" y1="8" x2="12" />
                       <line x1="12" y1="16" x2="12.01" y2="16" strokeWidth="3" />
                     </svg>
                   )}
@@ -156,7 +202,7 @@ export default function PlacementCheckModal({ isOpen, onClose, live, deviceId })
 
                 {!item.passed && (
                   <span className="failed-info-badge" title="Click for details">
-                    Needs Action
+                    {isResetting ? "Resetting" : "Needs Action"}
                   </span>
                 )}
               </div>
@@ -185,15 +231,25 @@ export default function PlacementCheckModal({ isOpen, onClose, live, deviceId })
         </div>
 
         {/* Action Button */}
-        <button className="recalibrate-btn" onClick={handleRecalibrate} disabled={calibrating}>
-          {calibrating ? "Recalibrating sensor..." : "Recalibrate sensor"}
+        <button className="recalibrate-btn" onClick={handleRecalibrate} disabled={isBusy}>
+          {isInitiating
+            ? "Sending recalibration command..."
+            : isResetting
+            ? "Recalibrating sensor baseline..."
+            : "Recalibrate sensor"}
         </button>
 
         {/* Placement Instruction Subtext */}
         <p className="placement-footer-subtext">
-          After recalibration, the sensor will takes 1-2 minutes to lock onto your breathing and heart rate. 
+          After recalibration, the sensor will automatically re-lock onto your breathing and heart rate.
         </p>
       </div>
     </div>
   );
 }
+
+
+
+
+
+

@@ -1,23 +1,21 @@
 import React from "react";
+import { formatRating } from "../utils/argusEnums.js";
 
 export default function ArgusSleepGauge({ score, quality, deepPct, sleepTimeMin }) {
   const displayScore = typeof score === "number" ? Math.min(100, Math.max(0, score)) : 75;
 
-  // Arc calculations (Radius 58, Circumference = 2 * PI * 58 = 364.42)
   const radius = 58;
   const circumference = 2 * Math.PI * radius;
   const progressOffset = circumference - (displayScore / 100) * circumference;
 
-  let ratingTier = "Optimal Rest";
+  const ratingStr = formatRating(quality);
+
   let tierColor = "#10b981";
-  if (displayScore < 50) {
-    ratingTier = "Restless Sleep";
+  if (ratingStr.includes("Poor") || displayScore < 50) {
     tierColor = "#f43f5e";
-  } else if (displayScore < 70) {
-    ratingTier = "Moderate Rest";
+  } else if (ratingStr.includes("Average") || displayScore < 70) {
     tierColor = "#f59e0b";
-  } else if (displayScore < 85) {
-    ratingTier = "Good Rest";
+  } else if (ratingStr.includes("Good") || displayScore < 85) {
     tierColor = "#06b6d4";
   }
 
@@ -28,7 +26,7 @@ export default function ArgusSleepGauge({ score, quality, deepPct, sleepTimeMin 
       <div className="argus-card-header">
         <span className="argus-card-title">Sleep Quality Index</span>
         <span className="argus-badge-pill" style={{ borderColor: tierColor, color: tierColor }}>
-          {quality !== undefined && quality !== null ? `Score: ${quality}` : ratingTier}
+          {ratingStr}
         </span>
       </div>
 
@@ -79,3 +77,4 @@ export default function ArgusSleepGauge({ score, quality, deepPct, sleepTimeMin 
     </div>
   );
 }
+

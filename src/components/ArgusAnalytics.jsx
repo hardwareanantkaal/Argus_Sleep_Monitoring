@@ -1,22 +1,41 @@
 import React from "react";
+import {
+  formatDisturbance,
+  formatAbnormal,
+  formatRating,
+  formatSleepState,
+  getNightlyData,
+} from "../utils/argusEnums.js";
 
 export default function ArgusAnalytics({ live }) {
-  const sleepTimeMin = live?.sSleepTime ?? 0;
-  const deepPct = live?.sDeep ?? 0;
-  const shallowPct = live?.sShallow ?? 0;
-  const exitCount = live?.sExit ?? 0;
-  const turnovers = live?.cTurn ?? 0;
-  const apnea = live?.cApnea ?? 0;
-  const cHeart = live?.cHeart || live?.heartRate || 0;
-  const cResp = live?.cResp || live?.breathRate || 0;
+  const nightly = getNightlyData(live);
 
-  const hours = Math.floor(sleepTimeMin / 60);
-  const mins = sleepTimeMin % 60;
+  const {
+    sApnea,
+    sDeep,
+    sExit,
+    sHeart,
+    sOOB,
+    sResp,
+    sScore,
+    sShallow,
+    sSleepTime,
+    sTurn,
+    sWake,
+  } = nightly;
+
+  const disturbanceStr = formatDisturbance(live?.disturbance ?? live?.eSleepDisturbances ?? live?.sDisturbance ?? 3);
+  const abnormalStr = formatAbnormal(live?.abnormal ?? live?.eAbnormalStruggle ?? live?.struggle ?? 0);
+  const ratingStr = formatRating(live?.rating ?? live?.quality ?? 0);
+  const sleepStateStr = formatSleepState(live?.sleepState ?? 3);
+
+  const hours = Math.floor(sSleepTime / 60);
+  const mins = sSleepTime % 60;
   const durationStr = `${hours}h ${mins}m`;
 
   return (
     <div className="argus-analytics-container">
-      {/* Session Overview Section */}
+      {/* 1. Nightly Session Breakdown */}
       <section className="analytics-section">
         <h2 className="argus-section-title">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#06b6d4" strokeWidth="2.2">
@@ -25,7 +44,7 @@ export default function ArgusAnalytics({ live }) {
             <line x1="8" y1="2" x2="8" y2="6" />
             <line x1="3" y1="10" x2="21" y2="10" />
           </svg>
-          <span>Sleep Session Overview</span>
+          <span>Nightly Session Breakdown (Telemetry)</span>
         </h2>
 
         <div className="analytics-hero-grid">
@@ -34,36 +53,53 @@ export default function ArgusAnalytics({ live }) {
             <div className="hero-card-val-row">
               <span className="hero-card-val">{durationStr}</span>
             </div>
-            <span className="hero-card-sub">{sleepTimeMin} minutes recorded</span>
+            <span className="hero-card-sub">{sSleepTime} minutes recorded (sSleepTime)</span>
           </div>
 
           <div className="analytics-hero-card">
             <span className="hero-card-lbl">Deep Rest Ratio</span>
             <div className="hero-card-val-row">
-              <span className="hero-card-val cyan-val">{deepPct}%</span>
+              <span className="hero-card-val cyan-val">{sDeep}%</span>
             </div>
-            <span className="hero-card-sub">Restorative sleep phase</span>
+            <span className="hero-card-sub">Restorative sleep (sDeep)</span>
           </div>
 
           <div className="analytics-hero-card">
             <span className="hero-card-lbl">Light Rest Ratio</span>
             <div className="hero-card-val-row">
-              <span className="hero-card-val emerald-val">{shallowPct}%</span>
+              <span className="hero-card-val emerald-val">{sShallow}%</span>
             </div>
-            <span className="hero-card-sub">Light sleep phase</span>
+            <span className="hero-card-sub">Light sleep phase (sShallow)</span>
           </div>
 
           <div className="analytics-hero-card">
-            <span className="hero-card-lbl">Bed Exits</span>
+            <span className="hero-card-lbl">Awake Duration</span>
             <div className="hero-card-val-row">
-              <span className="hero-card-val amber-val">{exitCount}</span>
+              <span className="hero-card-val amber-val">{sWake}m</span>
             </div>
-            <span className="hero-card-sub">Times exited bed</span>
+            <span className="hero-card-sub">Awake period in bed (sWake)</span>
+          </div>
+
+          <div className="analytics-hero-card">
+            <span className="hero-card-lbl">Out of Bed Time</span>
+            <div className="hero-card-val-row">
+              <span className="hero-card-val rose-val">{sOOB}m</span>
+            </div>
+            <span className="hero-card-sub">Minutes out of bed (sOOB)</span>
+          </div>
+
+          <div className="analytics-hero-card">
+            <span className="hero-card-lbl">Nightly Score</span>
+            <div className="hero-card-val-row">
+              <span className="hero-card-val purple-val">{sScore}</span>
+              <span style={{ fontSize: "14px", color: "var(--text-muted)", marginLeft: "4px" }}>/100</span>
+            </div>
+            <span className="hero-card-sub">Overall night rating (sScore)</span>
           </div>
         </div>
       </section>
 
-      {/* Composite Rolling Metrics Grid */}
+      {/* 2. Nightly Disruptions & Session Averages */}
       <section className="analytics-section">
         <h2 className="argus-section-title">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#6366f1" strokeWidth="2.2">
@@ -71,58 +107,74 @@ export default function ArgusAnalytics({ live }) {
             <line x1="12" y1="20" x2="12" y2="4" />
             <line x1="6" y1="20" x2="6" y2="14" />
           </svg>
-          <span>Composite Telemetry (Rolling Averages)</span>
+          <span>Disruptions & Session Averages</span>
         </h2>
 
         <div className="analytics-grid">
           <div className="argus-stat-item">
-            <div className="stat-item-lbl">Avg Respiration</div>
+            <div className="stat-item-lbl">Apnea Disruptions (sApnea)</div>
             <div className="stat-item-val-row">
-              <span className="stat-item-val cyan-val">{cResp}</span>
-              <span className="stat-item-unit">RPM</span>
-            </div>
-            <div className="stat-item-sub">Breathing frequency</div>
-          </div>
-
-          <div className="argus-stat-item">
-            <div className="stat-item-lbl">Avg Cardiac Rate</div>
-            <div className="stat-item-val-row">
-              <span className="stat-item-val emerald-val">{cHeart}</span>
-              <span className="stat-item-unit">BPM</span>
-            </div>
-            <div className="stat-item-sub">Heartbeat frequency</div>
-          </div>
-
-          <div className="argus-stat-item">
-            <div className="stat-item-lbl">Position Turnovers</div>
-            <div className="stat-item-val-row">
-              <span className="stat-item-val purple-val">{turnovers}</span>
-            </div>
-            <div className="stat-item-sub">Body rotations</div>
-          </div>
-
-          <div className="argus-stat-item">
-            <div className="stat-item-lbl">Apnea Disruptions</div>
-            <div className="stat-item-val-row">
-              <span className="stat-item-val rose-val">{apnea}</span>
+              <span className="stat-item-val rose-val">{sApnea}</span>
             </div>
             <div className="stat-item-sub">Breathing pause events</div>
           </div>
 
           <div className="argus-stat-item">
-            <div className="stat-item-lbl">Minor Tremors</div>
+            <div className="stat-item-lbl">Bed Exits (sExit)</div>
             <div className="stat-item-val-row">
-              <span className="stat-item-val">{live?.cMinor ?? 0}</span>
+              <span className="stat-item-val amber-val">{sExit}</span>
             </div>
-            <div className="stat-item-sub">Micro movements</div>
+            <div className="stat-item-sub">Times exited bed</div>
           </div>
 
           <div className="argus-stat-item">
-            <div className="stat-item-lbl">Large Movements</div>
+            <div className="stat-item-lbl">Turnovers (sTurn)</div>
             <div className="stat-item-val-row">
-              <span className="stat-item-val amber-val">{live?.cLarge ?? 0}</span>
+              <span className="stat-item-val purple-val">{sTurn}</span>
             </div>
-            <div className="stat-item-sub">Major motion spikes</div>
+            <div className="stat-item-sub">Position rotations</div>
+          </div>
+
+          <div className="argus-stat-item">
+            <div className="stat-item-lbl">Avg Cardiac Rate (sHeart)</div>
+            <div className="stat-item-val-row">
+              <span className="stat-item-val cyan-val">{sHeart}</span>
+              <span className="stat-item-unit">BPM</span>
+            </div>
+            <div className="stat-item-sub">Session average heart rate</div>
+          </div>
+
+          <div className="argus-stat-item">
+            <div className="stat-item-lbl">Avg Respiration (sResp)</div>
+            <div className="stat-item-val-row">
+              <span className="stat-item-val emerald-val">{sResp}</span>
+              <span className="stat-item-unit">RPM</span>
+            </div>
+            <div className="stat-item-sub">Session average breathing</div>
+          </div>
+
+          <div className="argus-stat-item">
+            <div className="stat-item-lbl">Disturbance (eSleepDisturbances)</div>
+            <div className="stat-item-val-row">
+              <span className="stat-item-val rose-val" style={{ fontSize: "13px", fontWeight: "700" }}>{disturbanceStr}</span>
+            </div>
+            <div className="stat-item-sub">Firmware sleep disturbance</div>
+          </div>
+
+          <div className="argus-stat-item">
+            <div className="stat-item-lbl">Struggle Status (eAbnormalStruggle)</div>
+            <div className="stat-item-val-row">
+              <span className="stat-item-val amber-val" style={{ fontSize: "13px", fontWeight: "700" }}>{abnormalStr}</span>
+            </div>
+            <div className="stat-item-sub">Firmware struggle monitor</div>
+          </div>
+
+          <div className="argus-stat-item">
+            <div className="stat-item-lbl">Quality Rating (eSleepQualityRating)</div>
+            <div className="stat-item-val-row">
+              <span className="stat-item-val cyan-val" style={{ fontSize: "13px", fontWeight: "700" }}>{ratingStr}</span>
+            </div>
+            <div className="stat-item-sub">Sleep quality index</div>
           </div>
         </div>
       </section>
@@ -138,9 +190,11 @@ export default function ArgusAnalytics({ live }) {
           <span className="insight-box-title">ARGUS TELEMETRY DIAGNOSTIC</span>
         </div>
         <p className="insight-box-body">
-          Session status: {durationStr} recorded. {deepPct}% deep sleep ratio with {exitCount} bed exit events and {apnea} apnea pauses detected. Sensor link is active.
+          Current State: {sleepStateStr} phase. Sleep Score: <strong>{sScore}/100</strong> ({durationStr} recorded). Sleep Rating: <strong>{ratingStr}</strong>. Disturbance Status: <strong>{disturbanceStr}</strong>. Struggle Status: <strong>{abnormalStr}</strong>. Sensor telemetry active.
         </p>
       </div>
     </div>
   );
 }
+
+

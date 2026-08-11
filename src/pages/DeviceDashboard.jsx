@@ -4,9 +4,10 @@ import { db } from "../firebase.js";
 import { ref, onValue, set } from "firebase/database";
 
 import ArgusHeader from "../components/ArgusHeader.jsx";
-import ArgusSleepGauge from "../components/ArgusSleepGauge.jsx";
-import ArgusVitalsMatrix from "../components/ArgusVitalsMatrix.jsx";
-import ArgusAnalytics from "../components/ArgusAnalytics.jsx";
+import LiveDataSection from "../components/LiveDataSection.jsx";
+import CompositeSection from "../components/CompositeSection.jsx";
+import NightlySection from "../components/NightlySection.jsx";
+import HistorySection from "../components/HistorySection.jsx";
 import DeviceSettingsPanel from "../components/DeviceSettingsPanel.jsx";
 import PlacementCheckModal from "../components/PlacementCheckModal.jsx";
 import { evaluateDeviceStatus, useTick } from "../utils/status.js";
@@ -15,6 +16,7 @@ export default function DeviceDashboard() {
   const { deviceId } = useParams();
   const [info, setInfo] = useState(null);
   const [live, setLive] = useState(null);
+  const [history, setHistory] = useState(null);
   const [lastReceivedAt, setLastReceivedAt] = useState(null);
   const [isPlacementOpen, setIsPlacementOpen] = useState(false);
   const [updatingConfig, setUpdatingConfig] = useState(false);
@@ -24,20 +26,37 @@ export default function DeviceDashboard() {
   useEffect(() => {
     const infoRef = ref(db, `devices/${deviceId}/info`);
     const liveRef = ref(db, `devices/${deviceId}/live`);
+    const historyRef = ref(db, `devices/${deviceId}/history`);
+
+    let isInitialInfo = true;
+    let isInitialLive = true;
 
     const unsubInfo = onValue(infoRef, (snap) => {
       setInfo(snap.val());
-      setLastReceivedAt(Date.now());
+      if (!isInitialInfo) {
+        setLastReceivedAt(Date.now());
+      } else {
+        isInitialInfo = false;
+      }
     });
 
     const unsubLive = onValue(liveRef, (snap) => {
       setLive(snap.val());
-      setLastReceivedAt(Date.now());
+      if (!isInitialLive) {
+        setLastReceivedAt(Date.now());
+      } else {
+        isInitialLive = false;
+      }
+    });
+
+    const unsubHistory = onValue(historyRef, (snap) => {
+      setHistory(snap.val());
     });
 
     return () => {
       unsubInfo();
       unsubLive();
+      unsubHistory();
     };
   }, [deviceId]);
 
@@ -106,23 +125,20 @@ export default function DeviceDashboard() {
         </div>
       )}
 
-      {/* Main Hero Vitals Matrix */}
-      <ArgusVitalsMatrix live={live} online={status.online} />
+      {/* 1. Live Data Section */}
+      <LiveDataSection live={live} online={status.online} />
 
-      {/* Sleep Quality Index & Radial Gauge Section */}
-      <div className="dashboard-row-gauge">
-        <ArgusSleepGauge
-          score={live?.sScore}
-          quality={live?.quality}
-          deepPct={live?.sDeep}
-          sleepTimeMin={live?.sSleepTime}
-        />
-      </div>
+      {/* 2. Composite Telemetry Section */}
+      <CompositeSection live={live} />
 
-      {/* Analytics & Diagnostic Section */}
-      <ArgusAnalytics live={live} />
+      {/* 3. Nightly Telemetry Section (nightly) */}
+      <NightlySection live={live} />
 
-      {/* Device Controls & Settings Section (Near Footer) */}
+      {/* 4. Session History & Staging Timeline Section (/history) */}
+      <HistorySection deviceId={deviceId} history={history} />
+
+
+      {/* Device Controls & Settings Section */}
       <DeviceSettingsPanel
         configMode={isConfigActive}
         onToggleConfigMode={handleToggleConfigMode}
@@ -149,3 +165,6 @@ export default function DeviceDashboard() {
     </div>
   );
 }
+
+
+

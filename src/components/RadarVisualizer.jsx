@@ -1,12 +1,13 @@
 import React from "react";
+import { formatPresence, formatMovement } from "../utils/argusEnums.js";
 
 export default function RadarVisualizer({ presence, distance, motion, online }) {
-  // Normalize distance for radar ring (max 400cm)
   const maxDistance = 400;
   const distVal = typeof distance === "number" ? Math.min(distance, maxDistance) : 0;
   const distPercent = Math.max(15, Math.min(88, (distVal / maxDistance) * 100));
 
-  const motionLabel = ["None", "Still", "Active"][motion] || "Unknown";
+  const presenceText = formatPresence(presence);
+  const movementVal = formatMovement(motion);
 
   return (
     <div className="radar-container">
@@ -18,8 +19,8 @@ export default function RadarVisualizer({ presence, distance, motion, online }) 
           </svg>
           <span>60GHz Millimeter-Wave Radar</span>
         </div>
-        <div className={`radar-presence-tag ${presence ? "detected" : "none"}`}>
-          {presence ? "TARGET DETECTED" : "NO TARGET"}
+        <div className={`radar-presence-tag ${presenceText === "Someone is present" ? "detected" : "none"}`}>
+          {presenceText.toUpperCase()}
         </div>
       </div>
 
@@ -35,9 +36,9 @@ export default function RadarVisualizer({ presence, distance, motion, online }) 
         {online && <div className="radar-sweep"></div>}
 
         {/* Target blip indicator */}
-        {presence && online && (
+        {(presence === 1 || presence === true) && online && (
           <div
-            className={`radar-blip ${motion === 2 ? "active" : ""}`}
+            className={`radar-blip ${movementVal > 0 ? "active" : ""}`}
             style={{
               top: `${50 - (distPercent / 2.5) * Math.sin(1.2)}%`,
               left: `${50 + (distPercent / 2.5) * Math.cos(1.2)}%`,
@@ -55,11 +56,11 @@ export default function RadarVisualizer({ presence, distance, motion, online }) 
       <div className="radar-footer">
         <div className="radar-metric">
           <span className="metric-lbl">Target Distance</span>
-          <span className="metric-val">{presence && distance !== undefined ? `${distance} cm` : "—"}</span>
+          <span className="metric-val">{(presence === 1 || presence === true) && distance !== undefined ? `${distance} cm` : "—"}</span>
         </div>
         <div className="radar-metric">
-          <span className="metric-lbl">Micro-Motion</span>
-          <span className="metric-val">{motionLabel}</span>
+          <span className="metric-lbl">Movement</span>
+          <span className="metric-val">{movementVal}</span>
         </div>
         <div className="radar-metric">
           <span className="metric-lbl">Sensor Link</span>
@@ -71,3 +72,4 @@ export default function RadarVisualizer({ presence, distance, motion, online }) 
     </div>
   );
 }
+
