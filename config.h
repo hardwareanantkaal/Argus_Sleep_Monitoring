@@ -50,6 +50,12 @@
 // this engine stages every minute from movement + vitals, so naps work too.
 #define SLEEP_EPOCH_SEC   60   // one staging decision per minute
 #define ONSET_QUIET_EP     3   // quiet minutes in bed -> counted as asleep
+#define SESSION_CONFIRM_EP 5   // light-or-deep minutes needed before a session
+                                // becomes real/visible in history + Firebase
+#define SESSION_PUSH_EP    5   // once confirmed, refresh the SAME Firebase
+                                // history node every this-many staging epochs
+                                // (minutes) — one session, updated in place,
+                                // never split into several
 #define DEEP_AFTER_EP     10   // very-quiet asleep minutes -> deep sleep
 #define QUIET_RANGE        8   // mean movement <= this = quiet minute
 #define WAKE_RANGE        14   // mean movement >= this while asleep = awakening

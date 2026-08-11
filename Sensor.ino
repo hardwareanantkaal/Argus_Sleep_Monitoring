@@ -138,8 +138,24 @@ void sensorTask(void*) {
     sleepFeed(cur, lv, rp, repReady);
     if (repReady) {
       if (cur.cApnea > 0 && cur.cApnea <= 40) rp.apnea = cur.cApnea;  // radar apnea if sane
-      reportSave(rp);                                  // stamps rp.when, appends history
-      if (WiFi.status() == WL_CONNECTED) firebasePushHistory(rp);  // mirror to cloud
+      reportSave(rp);                                  // stamps rp.when, appends history (local backup)
+      String sid = sleepSessionId();                   // still valid here — resetSession() runs after sleepFeed()
+      if (WiFi.status() == WL_CONNECTED && sid.length())
+        firebasePushHistory(rp, sid, false);            // final push: inProgress=false
+    } else if (sleepSessionDuePush()) {
+      // ---- periodic in-progress refresh: SAME session, SAME Firebase node ----
+      // Confirmed session still running (in bed, asleep) — push an updated
+      // snapshot every SESSION_PUSH_EP minutes so a full night shows live
+      // progress instead of nothing until the person finally gets up.
+      NightReport snap;
+      if (sleepSessionSnapshot(snap)) {
+        if (cur.cApnea > 0 && cur.cApnea <= 40) snap.apnea = cur.cApnea;
+        String sid = sleepSessionId();
+        if (WiFi.status() == WL_CONNECTED && sid.length()) {
+          firebasePushHistory(snap, sid, true);          // in-progress push: inProgress=true
+          sleepSessionMarkPushed();
+        }
+      }
     }
 
     xSemaphoreTake(mux, portMAX_DELAY);

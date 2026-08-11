@@ -13,7 +13,17 @@
 //   /devices/{deviceId}/live   <- live radar snapshot, overwritten every 1s
 //     /live/composite          <- C1001's short-term rolling stats (cResp, cHeart, ...)
 //     /live/nightly            <- C1001's overnight statistics block (sScore, sSleepTime, ...)
-//   /devices/{deviceId}/history/{sessionId} <- one node per finished session
+//     /live/sleepTimeline      <- GROWING stage-change log for the current session,
+//                                  {"HH:MM":"Light"/"Deep"/"Awake"/"None", ...} — one entry
+//                                  per real transition, only once a session is confirmed
+//                                  (see Sleep.ino). Omitted while no session is running.
+//   /devices/{deviceId}/history/{sessionId} <- one node PER NIGHT, refreshed
+//     in place every SESSION_PUSH_EP minutes while asleep (inProgress:true),
+//     and once more when the session ends (inProgress:false). Includes
+//     startTime/endTime (now "YYYY-MM-DD HH:MM", date + clock time) and the
+//     full sleepTimeline stage-change log for the session. sessionId is
+//     stable for the whole session (see Sleep.ino sleepSessionId()) — never
+//     a new node per push.
 //
 // deviceId = fixed DEVICE_ID from config.h (was MAC-based; simplified to a
 // single default name, no more per-unit auto-generation).
@@ -127,8 +137,12 @@ static String fbGet(const String& path) {
 // Base fields are the instant reading; "composite" and "nightly" are nested
 // objects so Firebase shows them as separate child nodes under /live —
 // /live/composite (C1001 short-term rolling stats) and /live/nightly
-// (C1001 overnight statistics block). One PUT writes all three at once, so
-// there's no risk of one push wiping out the others.
+// (C1001 overnight statistics block). "sleepTimeline" is the GROWING
+// stage-change log for the current session (see Sleep.ino) — e.g.
+// {"12:00":"Light","01:00":"Deep"} — omitted entirely while no session is
+// confirmed yet, so the field only appears once there's something to show.
+// One PUT writes everything at once, so there's no risk of one push wiping
+// out the others.
 void firebasePushLive() {
   SensorData d;
   bool rOk;
@@ -145,7 +159,7 @@ void firebasePushLive() {
     "\"disturbance\":%d,\"rating\":%d,\"abnormal\":%d,"
     "\"composite\":{\"cResp\":%d,\"cHeart\":%d,\"cTurn\":%d,\"cLarge\":%d,\"cMinor\":%d,\"cApnea\":%d},"
     "\"nightly\":{\"sScore\":%d,\"sSleepTime\":%d,\"sWake\":%d,\"sShallow\":%d,\"sDeep\":%d,"
-    "\"sOOB\":%d,\"sExit\":%d,\"sTurn\":%d,\"sResp\":%d,\"sHeart\":%d,\"sApnea\":%d}}",
+    "\"sOOB\":%d,\"sExit\":%d,\"sTurn\":%d,\"sResp\":%d,\"sHeart\":%d,\"sApnea\":%d}",
     rOk?1:0, d.valid?1:0,
     d.presence, d.motion, d.movingRange, d.distance,
     d.heartRate, d.breathRate, d.breathState,
@@ -154,7 +168,12 @@ void firebasePushLive() {
     d.cResp, d.cHeart, d.cTurn, d.cLarge, d.cMinor, d.cApnea,
     d.sScore, d.sSleepTime, d.sWake, d.sShallow, d.sDeep,
     d.sOOB, d.sExit, d.sTurn, d.sResp, d.sHeart, d.sApnea);
-  fbPut("live", String(b));
+
+  String out = String(b);
+  String tl = sleepTimelineJson();
+  if (tl.length()) out += ",\"sleepTimeline\":{" + tl + "}";
+  out += "}";
+  fbPut("live", out);
 }
 
 // /devices/{id}/info -> identity + connectivity (call at boot + every FIREBASE_INFO_MS).
@@ -217,25 +236,33 @@ void firebasePollRecalibrate() {
   }
 }
 
-// /devices/{id}/history/{sessionId} -> one finished night's report.
-// sessionId is the report's own timestamp string with non-alnum chars
-// stripped, so it sorts and is safe as an RTDB key.
-void firebasePushHistory(const NightReport& r) {
-  if (!r.valid) return;
-  String sid; sid.reserve(20);
-  for (const char* p = r.when; *p; p++) if (isalnum((unsigned char)*p)) sid += *p;
-  if (!sid.length()) sid = String((unsigned long)(millis()/1000));
+// /devices/{id}/history/{sessionId} -> one session's report, in progress or
+// finished. sessionId is now a STABLE id supplied by the caller (Sleep.ino's
+// sleepSessionId(), set once when the session is confirmed) — every push for
+// the same night's sleep writes to the SAME node, refreshing it in place.
+// A brand new node only appears once per night, not once per push.
+// "sleepTimeline" carries the full stage-change log at push time — in
+// progress it's whatever has happened so far, on the final push it's the
+// complete night's timeline. startTime/endTime are now full "YYYY-MM-DD
+// HH:MM" strings (date + clock time), not bare "HH:MM".
+void firebasePushHistory(const NightReport& r, const String& sessionId, bool inProgress) {
+  if (!r.valid || !sessionId.length()) return;
 
   int deepPct  = r.sleepMin ? r.deepMin  * 100 / r.sleepMin : 0;
   int lightPct = r.sleepMin ? r.lightMin * 100 / r.sleepMin : 0;
 
-  static char b[400];
+  static char b[520];
   snprintf(b, sizeof(b),
-    "{\"when\":\"%s\",\"bedMin\":%d,\"sleepMin\":%d,\"deepMin\":%d,\"lightMin\":%d,"
+    "{\"startTime\":\"%s\",\"endTime\":\"%s\",\"bedMin\":%d,\"sleepMin\":%d,\"deepMin\":%d,\"lightMin\":%d,"
     "\"awakeMin\":%d,\"deepPct\":%d,\"lightPct\":%d,\"onsetMin\":%d,\"wakes\":%d,"
-    "\"turns\":%d,\"avgHR\":%d,\"avgBR\":%d,\"apnea\":%d,\"score\":%d}",
-    r.when, r.bedMin, r.sleepMin, r.deepMin, r.lightMin,
+    "\"turns\":%d,\"avgHR\":%d,\"avgBR\":%d,\"apnea\":%d,\"score\":%d,\"inProgress\":%s",
+    r.startTime, r.endTime, r.bedMin, r.sleepMin, r.deepMin, r.lightMin,
     r.awakeMin, deepPct, lightPct, r.onsetMin, r.wakes,
-    r.turns, r.avgHR, r.avgBR, r.apnea, r.score);
-  fbPut(String("history/") + sid, String(b));
+    r.turns, r.avgHR, r.avgBR, r.apnea, r.score, inProgress ? "true" : "false");
+
+  String out = String(b);
+  String tl = sleepTimelineJson();
+  if (tl.length()) out += ",\"sleepTimeline\":{" + tl + "}";
+  out += "}";
+  fbPut(String("history/") + sessionId, out);
 }
