@@ -179,6 +179,13 @@ export default function LiveDataSection({ live, online }) {
           </div>
         </div>
       </div>
+
+      {live?.sleepTimeline && (
+        <SleepStageChart
+          sleepTimeline={live.sleepTimeline}
+          title="Live Sleep Stage Timeline (Current Session)"
+        />
+      )}
     </section>
   );
 }

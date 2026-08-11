@@ -31,7 +31,7 @@ export default function HistorySection({ deviceId, history }) {
   const handleRemoveSession = async (sessionId) => {
     if (!sessionId) return;
     const confirmDelete = window.confirm(
-      `Are you sure you want to permanently remove session "${sessionId}" from Firebase database?`
+      `Are you sure you want to permanently remove session "${sessionId}" ?`
     );
     if (!confirmDelete) return;
 
