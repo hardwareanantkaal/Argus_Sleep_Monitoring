@@ -61,6 +61,16 @@ export default function DeviceDashboard() {
     nowMs,
   });
 
+  // Automatically reset configMode = false in Firebase if the device is offline
+  useEffect(() => {
+    if (info && !status.online && info.configMode) {
+      const configRef = ref(db, `devices/${deviceId}/info/configMode`);
+      set(configRef, false).catch((err) => {
+        console.error("Auto-clearing configMode for offline device failed:", err);
+      });
+    }
+  }, [info, status.online, deviceId]);
+
   const handleToggleConfigMode = async (newVal) => {
     if (!status.online) {
       alert(`Device is offline (last active: ${status.lastSeenText || "unknown"}). Turn on your Argus sensor node before toggling Config Mode.`);
@@ -79,8 +89,9 @@ export default function DeviceDashboard() {
     }
   };
 
+  // Config Mode is ONLY active if device is currently ONLINE
+  const isConfigActive = status.online && Boolean(info?.configMode);
 
-  const isConfigActive = Boolean(info?.configMode);
 
   return (
     <div className="page argus-page">

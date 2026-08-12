@@ -113,9 +113,12 @@ export default function DeviceList() {
     let configCount = 0;
 
     evaluatedDevices.forEach((dev) => {
-      if (dev.status.online) onlineCount++;
-      else offlineCount++;
-      if (dev.info?.configMode) configCount++;
+      if (dev.status.online) {
+        onlineCount++;
+        if (dev.info?.configMode) configCount++;
+      } else {
+        offlineCount++;
+      }
     });
 
     return {
@@ -136,7 +139,7 @@ export default function DeviceList() {
 
       if (statusFilter === "online") return matchesSearch && dev.status.online;
       if (statusFilter === "offline") return matchesSearch && !dev.status.online;
-      if (statusFilter === "config") return matchesSearch && Boolean(dev.info?.configMode);
+      if (statusFilter === "config") return matchesSearch && dev.status.online && Boolean(dev.info?.configMode);
       return matchesSearch;
     });
   }, [evaluatedDevices, searchQuery, statusFilter]);
@@ -247,7 +250,7 @@ export default function DeviceList() {
               <div className="card-top-header">
                 <span className="device-card-name">{info.deviceName || "Argus Monitor Node"}</span>
                 <div className="card-badges-row">
-                  {info.configMode && (
+                  {status.online && info.configMode && (
                     <span className="argus-chip-small amber-chip" title="Device in Config / OTA Mode">
                       CONFIG MODE
                     </span>
@@ -257,6 +260,7 @@ export default function DeviceList() {
                   </span>
                 </div>
               </div>
+
 
               <div className="device-card-id">{id}</div>
 
