@@ -28,16 +28,10 @@ export default function DeviceDashboard() {
     const liveRef = ref(db, `devices/${deviceId}/live`);
     const historyRef = ref(db, `devices/${deviceId}/history`);
 
-    let isInitialInfo = true;
     let isInitialLive = true;
 
     const unsubInfo = onValue(infoRef, (snap) => {
       setInfo(snap.val());
-      if (!isInitialInfo) {
-        setLastReceivedAt(Date.now());
-      } else {
-        isInitialInfo = false;
-      }
     });
 
     const unsubLive = onValue(liveRef, (snap) => {
@@ -48,7 +42,6 @@ export default function DeviceDashboard() {
         isInitialLive = false;
       }
     });
-
 
     const unsubHistory = onValue(historyRef, (snap) => {
       setHistory(snap.val());
@@ -69,6 +62,11 @@ export default function DeviceDashboard() {
   });
 
   const handleToggleConfigMode = async (newVal) => {
+    if (!status.online) {
+      alert(`Device is offline (last active: ${status.lastSeenText || "unknown"}). Turn on your Argus sensor node before toggling Config Mode.`);
+      return;
+    }
+
     try {
       setUpdatingConfig(true);
       const configRef = ref(db, `devices/${deviceId}/info/configMode`);
@@ -80,6 +78,7 @@ export default function DeviceDashboard() {
       setUpdatingConfig(false);
     }
   };
+
 
   const isConfigActive = Boolean(info?.configMode);
 
@@ -110,11 +109,12 @@ export default function DeviceDashboard() {
             <button
               className="config-exit-btn"
               onClick={() => handleToggleConfigMode(false)}
-              disabled={updatingConfig}
+              disabled={updatingConfig || !status.online}
             >
-              {updatingConfig ? "Updating..." : "Exit Config Mode"}
+              {updatingConfig ? "Updating..." : !status.online ? "Device Offline" : "Exit Config Mode"}
             </button>
           </div>
+
           <p className="config-banner-desc">
             The device is currently set to <strong>configMode = true</strong> in Firebase. The ESP32 is ready for WiFi credential updates, Access Point pairing, or Over-The-Air (OTA) firmware updates.
           </p>
@@ -145,6 +145,7 @@ export default function DeviceDashboard() {
         onToggleConfigMode={handleToggleConfigMode}
         onOpenPlacementCheck={() => setIsPlacementOpen(true)}
         updatingConfig={updatingConfig}
+        online={status.online}
       />
 
       {/* Footer Specs */}
@@ -162,7 +163,9 @@ export default function DeviceDashboard() {
         onClose={() => setIsPlacementOpen(false)}
         live={live}
         deviceId={deviceId}
+        online={status.online}
       />
+
     </div>
   );
 }

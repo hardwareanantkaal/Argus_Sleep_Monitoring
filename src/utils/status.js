@@ -32,7 +32,7 @@ export function getDeviceTimestampMs(info, live) {
     }
   }
 
-  // 2. String date/time candidates (ISO strings or YYYY-MM-DD HH:mm:ss)
+  // 2. Full date/time string candidates (ISO strings or "YYYY-MM-DD HH:mm:ss")
   const stringCandidates = [
     live?.timeStr,
     info?.timeStr,
@@ -45,35 +45,18 @@ export function getDeviceTimestampMs(info, live) {
     if (val === undefined || val === null || val === "") continue;
 
     if (typeof val === "string") {
-      // Replace space with T if format is "YYYY-MM-DD HH:mm:ss"
+      // Must contain a full YYYY-MM-DD date to prevent synthesizing fake current-day timestamps from time-only strings
       const normalizedStr = val.replace(/^(\d{4}-\d{2}-\d{2})\s+(\d{2}:\d{2}:\d{2})$/, "$1T$2");
-      const parsed = Date.parse(normalizedStr);
-      if (!isNaN(parsed)) return parsed;
-
-      // Handle HH:mm:ss format e.g. "15:17:12" or "03:17:12 PM"
-      // Note: Only use time-only strings if explicitly needed, as they lack YYYY-MM-DD date context
-      const timeMatch = val.match(/^(\d{1,2}):(\d{2})(?::(\d{2}))?\s*(AM|PM)?$/i);
-      if (timeMatch) {
-        let hrs = parseInt(timeMatch[1], 10);
-        const mins = parseInt(timeMatch[2], 10);
-        const secs = timeMatch[3] ? parseInt(timeMatch[3], 10) : 0;
-        const ampm = timeMatch[4];
-        if (ampm) {
-          if (ampm.toUpperCase() === "PM" && hrs < 12) hrs += 12;
-          if (ampm.toUpperCase() === "AM" && hrs === 12) hrs = 0;
-        }
-        const d = new Date();
-        d.setHours(hrs, mins, secs, 0);
-        // Only return if within reasonable bounds (not fabricating a future time)
-        if (d.getTime() <= Date.now() + 5000) {
-          return d.getTime();
-        }
+      if (/^\d{4}-\d{2}-\d{2}/.test(normalizedStr)) {
+        const parsed = Date.parse(normalizedStr);
+        if (!isNaN(parsed)) return parsed;
       }
     }
   }
 
   return null;
 }
+
 
 
 /**

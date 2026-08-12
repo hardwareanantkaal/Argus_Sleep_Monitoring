@@ -3,7 +3,7 @@ import { db } from "../firebase.js";
 import { ref, set } from "firebase/database";
 import { formatPresence } from "../utils/argusEnums.js";
 
-export default function PlacementCheckModal({ isOpen, onClose, live, deviceId }) {
+export default function PlacementCheckModal({ isOpen, onClose, live, deviceId, online = true }) {
   const [calibState, setCalibState] = useState("idle"); // 'idle' | 'initiating' | 'resetting'
   const [activeTip, setActiveTip] = useState(null); // index of clicked tip
 
@@ -37,49 +37,59 @@ export default function PlacementCheckModal({ isOpen, onClose, live, deviceId })
   const hasBreath = Boolean(live?.breathRate && live.breathRate > 0);
   const hasHeart = Boolean(live?.heartRate && live.heartRate > 0);
 
-  // Condition checklist configuration (all false during resetting phase)
+  // Condition checklist configuration (all false during resetting phase or offline)
   const checklistItems = [
     {
       id: "presence",
       label: "Presence detected",
-      passed: isResetting ? false : hasPresence,
-      explanation: isResetting
+      passed: !online || isResetting ? false : hasPresence,
+      explanation: !online
+        ? "Device is offline. Turn on your sensor."
+        : isResetting
         ? "Hard resetting radar baseline signal..."
         : "No target detected. Ensure you are lying in bed within 0.5–1.5 meters of the sensor.",
     },
     {
       id: "stillness",
       label: "Holding still",
-      passed: isResetting ? false : isStill,
-      explanation: isResetting
+      passed: !online || isResetting ? false : isStill,
+      explanation: !online
+        ? "Device is offline."
+        : isResetting
         ? "Recalibrating radar motion threshold..."
         : "Active movement detected. Hold still for a few seconds without moving your body.",
     },
     {
       id: "breathing",
       label: "Breathing detected",
-      passed: isResetting ? false : hasBreath,
-      explanation: isResetting
+      passed: !online || isResetting ? false : hasBreath,
+      explanation: !online
+        ? "Device is offline."
+        : isResetting
         ? "Re-aligning chest vibration lock..."
         : "Sensor searching for chest movement. Breathe steadily and ensure sensor is facing your chest.",
     },
     {
       id: "heart",
       label: "Heart rate locked",
-      passed: isResetting ? false : hasHeart,
-      explanation: isResetting
+      passed: !online || isResetting ? false : hasHeart,
+      explanation: !online
+        ? "Device is offline."
+        : isResetting
         ? "Locking onto micro-cardiac pulse..."
         : "Acquiring micro-cardiac rhythm. Remain calm and stay still within 0.8 meters for sensor signal lock.",
     },
   ];
 
-  const metCount = isResetting ? 0 : checklistItems.filter((i) => i.passed).length;
+  const metCount = !online || isResetting ? 0 : checklistItems.filter((i) => i.passed).length;
   const signalScore = metCount * 25;
 
 
   // Status guidance message
   let statusMessage = "No target — place sensor ~0.5–0.8 m away";
-  if (isInitiating) {
+  if (!online) {
+    statusMessage = "Device is offline — connect sensor to run check";
+  } else if (isInitiating) {
     statusMessage = "Sending recalibration command to sensor...";
   } else if (isResetting) {
     statusMessage = "Hard resetting sensor baseline... Please hold still.";
@@ -96,11 +106,12 @@ export default function PlacementCheckModal({ isOpen, onClose, live, deviceId })
   // Gauge SVG calculations
   const radius = 48;
   const circumference = 2 * Math.PI * radius;
-  const progressOffset = isResetting
+  const progressOffset = !online || isResetting
     ? circumference
     : circumference - (signalScore / 100) * circumference;
 
   const handleRecalibrate = async () => {
+    if (!online) return;
     try {
       setCalibState("initiating");
 
@@ -164,10 +175,10 @@ export default function PlacementCheckModal({ isOpen, onClose, live, deviceId })
 
           <div className="placement-gauge-center">
             <span className="placement-score-num">
-              {isResetting ? "..." : signalScore}
+              {!online ? "OFF" : isResetting ? "..." : signalScore}
             </span>
             <span className="placement-score-lbl">
-              {isResetting ? "RESET" : "SIGNAL"}
+              {!online ? "OFFLINE" : isResetting ? "RESET" : "SIGNAL"}
             </span>
           </div>
         </div>
@@ -248,14 +259,14 @@ export default function PlacementCheckModal({ isOpen, onClose, live, deviceId })
 
                 {!item.passed && (
                   <span className="failed-info-badge" title="Click for details">
-                    {isResetting ? "Resetting" : "Needs Action"}
+                    {!online ? "Offline" : isResetting ? "Resetting" : "Needs Action"}
                   </span>
                 )}
               </div>
 
               {/* Failure Explanation Box */}
               {!item.passed && (
-                <div className={`failure-explanation-box ${activeTip === idx || metCount < 4 ? "visible" : ""}`}>
+                <div className={`failure-explanation-box ${activeTip === idx || (metCount < 4 && !isResetting && online) ? "visible" : ""}`}>
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" strokeWidth="2" style={{ flexShrink: 0, marginTop: 1 }}>
                     <polygon points="7.86 2 16.14 2 22 7.86 22 16.14 16.14 22 7.86 22 2 16.14 2 7.86 7.86 2" />
                     <line x1="12" y1="8" x2="12" y2="12" />
@@ -264,6 +275,7 @@ export default function PlacementCheckModal({ isOpen, onClose, live, deviceId })
                   <span>{item.explanation}</span>
                 </div>
               )}
+
             </div>
           ))}
         </div>
@@ -277,8 +289,10 @@ export default function PlacementCheckModal({ isOpen, onClose, live, deviceId })
         </div>
 
         {/* Action Button */}
-        <button className="recalibrate-btn" onClick={handleRecalibrate} disabled={isBusy}>
-          {isInitiating
+        <button className="recalibrate-btn" onClick={handleRecalibrate} disabled={isBusy || !online}>
+          {!online
+            ? "Device Offline — Cannot Recalibrate"
+            : isInitiating
             ? "Sending recalibration command..."
             : isResetting
             ? "Recalibrating sensor baseline..."
@@ -287,12 +301,15 @@ export default function PlacementCheckModal({ isOpen, onClose, live, deviceId })
 
         {/* Placement Instruction Subtext */}
         <p className="placement-footer-subtext">
-          After recalibration, the sensor will automatically re-lock onto your breathing and heart rate.
+          {online
+            ? "After recalibration, the sensor will automatically re-lock onto your breathing and heart rate."
+            : "Device is offline. Connect sensor to power & WiFi to run baseline calibration."}
         </p>
       </div>
     </div>
   );
 }
+
 
 
 
