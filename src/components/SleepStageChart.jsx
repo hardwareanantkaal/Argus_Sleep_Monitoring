@@ -10,10 +10,10 @@ export default function SleepStageChart({ sleepTimeline, title = "Sleep Stage Ti
 
   const getStageLevel = (stageStr) => {
     const s = (stageStr || "").toLowerCase();
-    if (s.includes("awake")) return { label: "Awake", level: 0, y: 25, color: "#f59e0b", bg: "rgba(245, 158, 11, 0.18)" };
-    if (s.includes("light") || s.includes("shallow")) return { label: "Light", level: 1, y: 80, color: "#06b6d4", bg: "rgba(6, 182, 212, 0.18)" };
-    if (s.includes("deep")) return { label: "Deep", level: 2, y: 135, color: "#818cf8", bg: "rgba(129, 140, 248, 0.18)" };
-    return { label: "Awake", level: 0, y: 25, color: "#64748b", bg: "rgba(148, 163, 184, 0.12)" };
+    if (s.includes("awake")) return { label: "Awake", level: 0, y: 30, color: "#f59e0b", bg: "rgba(245, 158, 11, 0.18)" };
+    if (s.includes("light") || s.includes("shallow")) return { label: "Light", level: 1, y: 85, color: "#06b6d4", bg: "rgba(6, 182, 212, 0.18)" };
+    if (s.includes("deep")) return { label: "Deep", level: 2, y: 140, color: "#818cf8", bg: "rgba(129, 140, 248, 0.18)" };
+    return { label: "Awake", level: 0, y: 30, color: "#64748b", bg: "rgba(148, 163, 184, 0.12)" };
   };
 
   // Calculate Stage Stats
@@ -33,16 +33,18 @@ export default function SleepStageChart({ sleepTimeline, title = "Sleep Stage Ti
   const lightPct = Math.round((lightCount / total) * 100);
   const awakePct = Math.round((awakeCount / total) * 100);
 
-  // Generate SVG Hypnogram Step Path
-  const width = 880;
-  const height = 160;
+  // Dynamic Width Calculation based on total points to prevent label overlap
   const paddingLeft = 70;
-  const paddingRight = 30;
+  const paddingRight = 40;
+  const pointWidth = 45; // Minimum 45px width per timeline data point for clean spacing
+  const minChartWidth = 880;
+  const width = Math.max(minChartWidth, paddingLeft + paddingRight + (parsed.length - 1) * pointWidth);
+  const height = 180;
   const chartWidth = width - paddingLeft - paddingRight;
 
   const points = parsed.map((item, index) => {
     const meta = getStageLevel(item.stage);
-    const x = paddingLeft + (index / (parsed.length > 1 ? parsed.length - 1 : 1)) * chartWidth;
+    const x = paddingLeft + (parsed.length > 1 ? (index / (parsed.length - 1)) * chartWidth : chartWidth / 2);
     return { x, y: meta.y, label: meta.label, color: meta.color, time: item.time, stage: item.stage };
   });
 
@@ -51,7 +53,6 @@ export default function SleepStageChart({ sleepTimeline, title = "Sleep Stage Ti
   if (points.length > 0) {
     pathD = `M ${points[0].x} ${points[0].y}`;
     for (let i = 1; i < points.length; i++) {
-      const prev = points[i - 1];
       const curr = points[i];
       pathD += ` H ${curr.x} V ${curr.y}`;
     }
@@ -60,8 +61,10 @@ export default function SleepStageChart({ sleepTimeline, title = "Sleep Stage Ti
   // Construct gradient area path
   let areaD = "";
   if (points.length > 0) {
-    areaD = `${pathD} L ${points[points.length - 1].x} ${height - 10} L ${points[0].x} ${height - 10} Z`;
+    areaD = `${pathD} L ${points[points.length - 1].x} ${height - 25} L ${points[0].x} ${height - 25} Z`;
   }
+
+  const isScrollable = width > minChartWidth;
 
   return (
     <div className="argus-card hypnogram-chart-card" style={{ padding: "22px" }}>
@@ -72,7 +75,9 @@ export default function SleepStageChart({ sleepTimeline, title = "Sleep Stage Ti
           </svg>
           <span className="argus-card-title">{title}</span>
         </div>
-        <span className="argus-chip-small cyan-chip">Continuous Hypnogram</span>
+        <span className="argus-chip-small cyan-chip">
+          {isScrollable ? `↔ Scrollable Hypnogram (${parsed.length} points)` : "Continuous Hypnogram"}
+        </span>
       </div>
 
       {parsed.length === 0 ? (
@@ -91,7 +96,7 @@ export default function SleepStageChart({ sleepTimeline, title = "Sleep Stage Ti
         </div>
       ) : (
         <div>
-          {/* Stage Quick Breakdown Cards (Easy to find Deep, Light, Awake) */}
+          {/* Stage Quick Breakdown Cards */}
           <div
             style={{
               display: "grid",
@@ -146,17 +151,26 @@ export default function SleepStageChart({ sleepTimeline, title = "Sleep Stage Ti
             </div>
           </div>
 
-          {/* SVG Hypnogram Line Chart */}
+          {/* SVG Hypnogram Line Chart with Horizontal Scrollbar Container */}
           <div
             style={{
               background: "var(--bg-card-hover)",
-              padding: "16px",
+              padding: "18px 16px 14px 16px",
               borderRadius: "18px",
               border: "1px solid var(--border-card)",
               overflowX: "auto",
+              WebkitOverflowScrolling: "touch",
             }}
           >
-            <svg viewBox={`0 0 ${width} ${height}`} style={{ width: "100%", height: "auto", display: "block" }}>
+            <svg
+              viewBox={`0 0 ${width} ${height}`}
+              style={{
+                width: `${width}px`,
+                height: "auto",
+                minWidth: "100%",
+                display: "block",
+              }}
+            >
               <defs>
                 <linearGradient id="hypnoGrad" x1="0" y1="0" x2="0" y2="1">
                   <stop offset="0%" stopColor="#06b6d4" stopOpacity="0.25" />
@@ -166,14 +180,14 @@ export default function SleepStageChart({ sleepTimeline, title = "Sleep Stage Ti
 
               {/* Y-Axis Reference Guide Lines */}
               <g className="hypno-grid">
-                <line x1={paddingLeft} y1="25" x2={width - paddingRight} y2="25" stroke="rgba(245, 158, 11, 0.25)" strokeDasharray="4 4" />
-                <text x="10" y="29" fill="#f59e0b" fontSize="11" fontWeight="700">Awake</text>
+                <line x1={paddingLeft} y1="30" x2={width - paddingRight} y2="30" stroke="rgba(245, 158, 11, 0.25)" strokeDasharray="4 4" />
+                <text x="12" y="34" fill="#f59e0b" fontSize="12" fontWeight="700">Awake</text>
 
-                <line x1={paddingLeft} y1="80" x2={width - paddingRight} y2="80" stroke="rgba(6, 182, 212, 0.25)" strokeDasharray="4 4" />
-                <text x="10" y="84" fill="#06b6d4" fontSize="11" fontWeight="700">Light</text>
+                <line x1={paddingLeft} y1="85" x2={width - paddingRight} y2="85" stroke="rgba(6, 182, 212, 0.25)" strokeDasharray="4 4" />
+                <text x="12" y="89" fill="#06b6d4" fontSize="12" fontWeight="700">Light</text>
 
-                <line x1={paddingLeft} y1="135" x2={width - paddingRight} y2="135" stroke="rgba(129, 140, 248, 0.25)" strokeDasharray="4 4" />
-                <text x="10" y="139" fill="#818cf8" fontSize="11" fontWeight="700">Deep</text>
+                <line x1={paddingLeft} y1="140" x2={width - paddingRight} y2="140" stroke="rgba(129, 140, 248, 0.25)" strokeDasharray="4 4" />
+                <text x="12" y="144" fill="#818cf8" fontSize="12" fontWeight="700">Deep</text>
               </g>
 
               {/* Gradient Area below step line */}
@@ -191,7 +205,7 @@ export default function SleepStageChart({ sleepTimeline, title = "Sleep Stage Ti
                 />
               )}
 
-              {/* Transition Nodes / Circles */}
+              {/* Transition Nodes / Circles & Timestamps */}
               {points.map((pt, idx) => (
                 <g key={idx}>
                   <circle
@@ -199,17 +213,18 @@ export default function SleepStageChart({ sleepTimeline, title = "Sleep Stage Ti
                     cy={pt.y}
                     r="5"
                     fill={pt.color}
-                    stroke="var(--bg-deep)"
+                    stroke="var(--bg-deep, #0f172a)"
                     strokeWidth="2"
                   />
                   {/* Timestamp on X-Axis */}
                   <text
                     x={pt.x}
-                    y={height - 2}
+                    y={height - 5}
                     textAnchor="middle"
                     fill="var(--text-subtle)"
-                    fontSize="10"
+                    fontSize="11"
                     fontFamily="var(--font-mono)"
+                    fontWeight="600"
                   >
                     {pt.time}
                   </text>

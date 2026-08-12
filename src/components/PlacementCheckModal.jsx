@@ -175,8 +175,54 @@ export default function PlacementCheckModal({ isOpen, onClose, live, deviceId })
         {/* Dynamic Status Message */}
         <div className="placement-status-msg">{statusMessage}</div>
 
+        {/* Real-Time Target Distance & Vital Telemetry Grid */}
+        <div
+          className="placement-telemetry-row"
+          style={{
+            display: "grid",
+            gridTemplateColumns: "repeat(3, 1fr)",
+            gap: "10px",
+            marginBottom: "18px",
+            background: "var(--bg-card-hover, rgba(241, 245, 249, 0.9))",
+            padding: "12px 14px",
+            borderRadius: "14px",
+            border: "1px solid var(--border-card, rgba(226, 232, 240, 0.9))",
+          }}
+        >
+          {/* Target Distance Parameter */}
+          <div style={{ textAlign: "center" }}>
+            <span style={{ fontSize: "11px", color: "var(--text-subtle, #475569)", fontWeight: "600", display: "block" }}>Target Distance</span>
+            <span style={{ fontSize: "16px", fontWeight: "800", color: "var(--cyan-accent, #0284c7)" }}>
+              {live?.distance ? `${live.distance} cm` : "—"}
+            </span>
+            <span style={{ fontSize: "10px", color: "var(--text-muted, #64748b)", display: "block" }}>
+              {live?.distance >= 40 && live?.distance <= 90 ? "Optimal Range" : "Ideal: 50–80cm"}
+            </span>
+          </div>
+
+          {/* Real-Time Heartbeat */}
+          <div style={{ textAlign: "center", borderLeft: "1px solid var(--border-card, rgba(226, 232, 240, 0.9))", borderRight: "1px solid var(--border-card, rgba(226, 232, 240, 0.9))" }}>
+            <span style={{ fontSize: "11px", color: "var(--text-subtle, #475569)", fontWeight: "600", display: "block" }}>Heartbeat</span>
+            <span style={{ fontSize: "16px", fontWeight: "800", color: live?.heartRate ? "var(--emerald-accent, #10b981)" : "var(--amber-accent, #d97706)" }}>
+              {live?.heartRate ? `${live.heartRate} BPM` : "No Lock"}
+            </span>
+            <span style={{ fontSize: "10px", color: "var(--text-muted, #64748b)", display: "block" }}>Cardiac Signal</span>
+          </div>
+
+          {/* Real-Time Respiration */}
+          <div style={{ textAlign: "center" }}>
+            <span style={{ fontSize: "11px", color: "var(--text-subtle, #475569)", fontWeight: "600", display: "block" }}>Respiration</span>
+            <span style={{ fontSize: "16px", fontWeight: "800", color: live?.breathRate ? "var(--cyan-accent, #06b6d4)" : "var(--amber-accent, #d97706)" }}>
+              {live?.breathRate ? `${live.breathRate} RPM` : "No Lock"}
+            </span>
+            <span style={{ fontSize: "10px", color: "var(--text-muted, #64748b)", display: "block" }}>Chest Motion</span>
+          </div>
+        </div>
+
+
         {/* Condition Checklist with Failure Explanations */}
         <div className="placement-checklist">
+
           {checklistItems.map((item, idx) => (
             <div key={item.id} className="checklist-item-wrapper">
               <div

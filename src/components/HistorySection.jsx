@@ -20,6 +20,20 @@ function isSessionInProgress(session, nowMs = Date.now()) {
   return fbFlag;
 }
 
+function formatHoursMinutes(totalMinutes) {
+  const mins = Number(totalMinutes);
+  if (isNaN(mins) || mins <= 0) return "0m";
+  const hrs = Math.floor(mins / 60);
+  const remMins = Math.round(mins % 60);
+
+  if (hrs > 0 && remMins > 0) {
+    return `${hrs}h ${remMins}m`;
+  } else if (hrs > 0) {
+    return `${hrs}h`;
+  }
+  return `${remMins}m`;
+}
+
 export default function HistorySection({ deviceId, history }) {
   const [isDeleting, setIsDeleting] = useState(false);
 
@@ -87,7 +101,9 @@ export default function HistorySection({ deviceId, history }) {
       ["End Time", session?.endTime ?? ""],
       ["Score", session?.score ?? 0],
       ["Asleep (min)", session?.sleepMin ?? 0],
+      ["Asleep (formatted)", formatHoursMinutes(session?.sleepMin ?? 0)],
       ["In Bed (min)", session?.bedMin ?? 0],
+      ["In Bed (formatted)", formatHoursMinutes(session?.bedMin ?? 0)],
       ["Sleep Onset (min)", session?.onsetMin ?? 0],
       ["Deep Sleep (min)", session?.deepMin ?? 0],
       ["Deep %", session?.deepPct ?? 0],
@@ -157,7 +173,7 @@ export default function HistorySection({ deviceId, history }) {
         </div>
       ) : (
         <div className="history-container">
-          {/* Interactive Session Pill Tabs (No select dropdown) */}
+          {/* Interactive Session Pill Tabs */}
           <div className="history-tabs-row" style={{ display: "flex", gap: "10px", overflowX: "auto", paddingBottom: "12px", marginBottom: "20px" }}>
             {sortedSessions.map(([id, session]) => {
               const isActive = id === activeSessionId;
@@ -190,7 +206,7 @@ export default function HistorySection({ deviceId, history }) {
                     </span>
                   ) : (
                     <span className="argus-chip-small muted-chip" style={{ fontSize: "10px", padding: "2px 6px" }}>
-                      {session?.sleepMin ?? 0}m
+                      {formatHoursMinutes(session?.sleepMin ?? 0)}
                     </span>
                   )}
                 </button>
@@ -288,17 +304,17 @@ export default function HistorySection({ deviceId, history }) {
                 <div className="analytics-hero-card">
                   <span className="hero-card-lbl">Asleep Time</span>
                   <div className="hero-card-val-row">
-                    <span className="hero-card-val">{activeSession.sleepMin ?? 0}m</span>
+                    <span className="hero-card-val">{formatHoursMinutes(activeSession.sleepMin ?? 0)}</span>
                   </div>
-                  <span className="hero-card-sub">Total sleep minutes</span>
+                  <span className="hero-card-sub">{activeSession.sleepMin ?? 0} total sleep minutes</span>
                 </div>
 
                 <div className="analytics-hero-card">
                   <span className="hero-card-lbl">In Bed Time</span>
                   <div className="hero-card-val-row">
-                    <span className="hero-card-val cyan-val">{activeSession.bedMin ?? 0}m</span>
+                    <span className="hero-card-val cyan-val">{formatHoursMinutes(activeSession.bedMin ?? 0)}</span>
                   </div>
-                  <span className="hero-card-sub">Total time in bed</span>
+                  <span className="hero-card-sub">{activeSession.bedMin ?? 0} total time in bed</span>
                 </div>
 
                 <div className="analytics-hero-card">
@@ -306,7 +322,7 @@ export default function HistorySection({ deviceId, history }) {
                   <div className="hero-card-val-row">
                     <span className="hero-card-val purple-val">{activeSession.deepPct ?? 0}%</span>
                   </div>
-                  <span className="hero-card-sub">{activeSession.deepMin ?? 0} minutes deep</span>
+                  <span className="hero-card-sub">{formatHoursMinutes(activeSession.deepMin ?? 0)} ({activeSession.deepMin ?? 0}m deep)</span>
                 </div>
 
                 <div className="analytics-hero-card">
@@ -314,17 +330,18 @@ export default function HistorySection({ deviceId, history }) {
                   <div className="hero-card-val-row">
                     <span className="hero-card-val emerald-val">{activeSession.lightPct ?? 0}%</span>
                   </div>
-                  <span className="hero-card-sub">{activeSession.lightMin ?? 0} minutes light</span>
+                  <span className="hero-card-sub">{formatHoursMinutes(activeSession.lightMin ?? 0)} ({activeSession.lightMin ?? 0}m light)</span>
                 </div>
 
                 <div className="analytics-hero-card">
                   <span className="hero-card-lbl">Sleep Onset</span>
                   <div className="hero-card-val-row">
-                    <span className="hero-card-val amber-val">{activeSession.onsetMin ?? 0}m</span>
+                    <span className="hero-card-val amber-val">{formatHoursMinutes(activeSession.onsetMin ?? 0)}</span>
                   </div>
                   <span className="hero-card-sub">Time to fall asleep</span>
                 </div>
               </div>
+
 
               {/* Session Disruptions & Telemetry Row */}
               <div className="composite-metrics-grid" style={{ marginBottom: "24px" }}>

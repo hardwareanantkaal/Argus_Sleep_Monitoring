@@ -5,39 +5,45 @@ import { useState, useEffect } from "react";
  * Supports numbers (seconds/ms), numeric strings, ISO strings, timeStr, and HH:mm:ss strings.
  */
 export function getDeviceTimestampMs(info, live) {
-  const candidates = [
-    live?.timeStr,
-    info?.timeStr,
-    live?.time,
+  // 1. Prioritize explicit numeric epoch timestamps (seconds or ms)
+  const numericCandidates = [
     live?.timestamp,
     live?.lastSeen,
     live?.ts,
     live?.updatedAt,
-    live?.clock,
     info?.lastSeen,
     info?.timestamp,
-    info?.time,
     info?.ts,
     info?.updatedAt,
   ];
 
-  for (const val of candidates) {
+  for (const val of numericCandidates) {
     if (val === undefined || val === null || val === "") continue;
 
-    // Direct numeric timestamp
     if (typeof val === "number") {
       if (val < 1e11) return val * 1000; // Convert seconds to ms
       return val;
     }
 
-    // String containing digits (epoch string)
     if (typeof val === "string" && !isNaN(val) && val.trim() !== "") {
       const num = Number(val);
       if (num < 1e11) return num * 1000;
       return num;
     }
+  }
 
-    // String date/time e.g. "2026-08-10 17:32:05" or ISO string
+  // 2. String date/time candidates (ISO strings or YYYY-MM-DD HH:mm:ss)
+  const stringCandidates = [
+    live?.timeStr,
+    info?.timeStr,
+    live?.time,
+    info?.time,
+    live?.clock,
+  ];
+
+  for (const val of stringCandidates) {
+    if (val === undefined || val === null || val === "") continue;
+
     if (typeof val === "string") {
       // Replace space with T if format is "YYYY-MM-DD HH:mm:ss"
       const normalizedStr = val.replace(/^(\d{4}-\d{2}-\d{2})\s+(\d{2}:\d{2}:\d{2})$/, "$1T$2");
@@ -45,6 +51,7 @@ export function getDeviceTimestampMs(info, live) {
       if (!isNaN(parsed)) return parsed;
 
       // Handle HH:mm:ss format e.g. "15:17:12" or "03:17:12 PM"
+      // Note: Only use time-only strings if explicitly needed, as they lack YYYY-MM-DD date context
       const timeMatch = val.match(/^(\d{1,2}):(\d{2})(?::(\d{2}))?\s*(AM|PM)?$/i);
       if (timeMatch) {
         let hrs = parseInt(timeMatch[1], 10);
@@ -57,13 +64,17 @@ export function getDeviceTimestampMs(info, live) {
         }
         const d = new Date();
         d.setHours(hrs, mins, secs, 0);
-        return d.getTime();
+        // Only return if within reasonable bounds (not fabricating a future time)
+        if (d.getTime() <= Date.now() + 5000) {
+          return d.getTime();
+        }
       }
     }
   }
 
   return null;
 }
+
 
 /**
  * Format relative elapsed time (e.g. "Just now", "4s ago", "2m ago")

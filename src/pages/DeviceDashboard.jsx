@@ -29,6 +29,7 @@ export default function DeviceDashboard() {
     const historyRef = ref(db, `devices/${deviceId}/history`);
 
     let isInitialInfo = true;
+    let isInitialLive = true;
 
     const unsubInfo = onValue(infoRef, (snap) => {
       setInfo(snap.val());
@@ -41,8 +42,13 @@ export default function DeviceDashboard() {
 
     const unsubLive = onValue(liveRef, (snap) => {
       setLive(snap.val());
-      setLastReceivedAt(Date.now());
+      if (!isInitialLive) {
+        setLastReceivedAt(Date.now());
+      } else {
+        isInitialLive = false;
+      }
     });
+
 
     const unsubHistory = onValue(historyRef, (snap) => {
       setHistory(snap.val());
