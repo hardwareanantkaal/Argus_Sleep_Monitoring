@@ -207,7 +207,7 @@ export default function PlacementCheckModal({ isOpen, onClose, live, deviceId, o
               {live?.distance ? `${live.distance} cm` : "—"}
             </span>
             <span style={{ fontSize: "10px", color: "var(--text-muted, #64748b)", display: "block" }}>
-              {live?.distance >= 40 && live?.distance <= 90 ? "Optimal Range" : "Ideal: 50–80cm"}
+              {live?.distance >= 70 && live?.distance <= 100 ? "Optimal Range" : "Ideal: 80–100cm"}
             </span>
           </div>
 
