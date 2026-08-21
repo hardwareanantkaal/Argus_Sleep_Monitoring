@@ -3,7 +3,7 @@
 #pragma once
 
 #define DEVICE_BRAND     "Argus Sleep Monitoring"
-#define DEVICE_ID        "argus-02"     // fixed device path name used in Firebase (was MAC-based)
+#define DEVICE_ID        "argus-03"     // fixed device path name used in Firebase (was MAC-based)
 
 // ---------------- WiFi / network ----------------
 // No compile-time WiFi credentials — the device keeps a LIST of saved
@@ -73,3 +73,21 @@
 #define FW_VERSION      "1.0"
 #define POLL_DELAY_MS   120
 #define SERIAL_PRINT_MS 2000
+
+// ---------------- sleep engine (on-device staging) ----------------
+#define SLEEP_EPOCH_SEC   60
+#define ONSET_QUIET_EP     3
+#define SESSION_CONFIRM_EP 5
+#define SESSION_PUSH_EP    5
+#define DEEP_AFTER_EP     10
+#define QUIET_RANGE        8
+#define WAKE_RANGE        14
+#define BURST_RANGE       30
+#define OOB_END_EP         4   // CHANGED: was 8 — close session faster once presence genuinely drops
+#define AUTO_SAVE_MIN     15
+#define MANUAL_SAVE_MIN    1
+
+// ---------------- presence debounce / ghost-reflection filter (NEW) ----------------
+#define PRESENCE_ZERO_DEBOUNCE   2       // consecutive rawP==0 reads before presence is cleared
+#define GHOST_ZERO_MOVE_MS   120000UL    // presence=1 + near-zero movement this long => treat as ghost, clear it
+#define GHOST_MOVE_FLOOR         2       // movingRange <= this counts as "no real motion" for the ghost check

@@ -45,6 +45,8 @@ NightReport             lastReport;
 SessSample              sessBuf[SESS_MAX];
 int                     sessN = 0, sessStart = 0;
 
+volatile bool           g_radarStatsResetPending = false;
+
 // while in AP setup mode, any unknown URL redirects to the config page
 // (captive portal behaviour) instead of a 404. Outside AP mode this server
 // only exists for a future /wifi visit, so a plain 404 is fine.

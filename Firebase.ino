@@ -146,8 +146,12 @@ static String fbGet(const String& path) {
 void firebasePushLive() {
   SensorData d;
   bool rOk;
+  SleepLive lv;
+  bool resetPending;
   xSemaphoreTake(mux, portMAX_DELAY);
-  d = g; rOk = radarOk;
+  d = g; rOk = radarOk; lv = live;
+  resetPending = g_radarStatsResetPending;
+  if (resetPending) g_radarStatsResetPending = false;
   xSemaphoreGive(mux);
 
   static char b[1000];
@@ -157,19 +161,28 @@ void firebasePushLive() {
     "\"heartRate\":%d,\"breathRate\":%d,\"breathState\":%d,"
     "\"inBed\":%d,\"sleepState\":%d,\"quality\":%d,"
     "\"disturbance\":%d,\"rating\":%d,\"abnormal\":%d,"
-    "\"composite\":{\"cResp\":%d,\"cHeart\":%d,\"cTurn\":%d,\"cLarge\":%d,\"cMinor\":%d,\"cApnea\":%d},"
-    "\"nightly\":{\"sScore\":%d,\"sSleepTime\":%d,\"sWake\":%d,\"sShallow\":%d,\"sDeep\":%d,"
-    "\"sOOB\":%d,\"sExit\":%d,\"sTurn\":%d,\"sResp\":%d,\"sHeart\":%d,\"sApnea\":%d}",
+    "\"composite\":{\"cResp\":%d,\"cHeart\":%d,\"cTurn\":%d,\"cLarge\":%d,\"cMinor\":%d,\"cApnea\":%d}",
     rOk?1:0, d.valid?1:0,
     d.presence, d.motion, d.movingRange, d.distance,
     d.heartRate, d.breathRate, d.breathState,
     d.inBed, d.sleepState, d.quality,
     d.disturbance, d.rating, d.abnormal,
-    d.cResp, d.cHeart, d.cTurn, d.cLarge, d.cMinor, d.cApnea,
-    d.sScore, d.sSleepTime, d.sWake, d.sShallow, d.sDeep,
-    d.sOOB, d.sExit, d.sTurn, d.sResp, d.sHeart, d.sApnea);
+    d.cResp, d.cHeart, d.cTurn, d.cLarge, d.cMinor, d.cApnea);
 
   String out = String(b);
+
+  // Only include "nightly" while a session is actually running, so an
+  // ended session's leftover radar totals can't be misread as current.
+  if (lv.active) {
+    static char nb[300];
+    snprintf(nb, sizeof(nb),
+      ",\"nightly\":{\"sScore\":%d,\"sSleepTime\":%d,\"sWake\":%d,\"sShallow\":%d,\"sDeep\":%d,"
+      "\"sOOB\":%d,\"sExit\":%d,\"sTurn\":%d,\"sResp\":%d,\"sHeart\":%d,\"sApnea\":%d}",
+      d.sScore, d.sSleepTime, d.sWake, d.sShallow, d.sDeep,
+      d.sOOB, d.sExit, d.sTurn, d.sResp, d.sHeart, d.sApnea);
+    out += String(nb);
+  }
+
   String tl = sleepTimelineJson();
   if (tl.length()) out += ",\"sleepTimeline\":{" + tl + "}";
   out += "}";

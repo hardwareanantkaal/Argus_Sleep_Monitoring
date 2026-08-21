@@ -60,6 +60,10 @@ extern volatile bool           g_endSession;  // web -> engine: end session, bui
 extern volatile bool           g_configMode;  // set true -> device forces AP setup mode
                                                // (WiFi change / OTA) on the next check in loop(),
                                                // even if saved WiFi already works
+extern volatile bool           g_radarStatsResetPending; // NEW: session just confirmed —
+                                               // tells Firebase.ino to stop trusting/pushing
+                                               // the radar's own nightly counters as if
+                                               // they belonged to this fresh session
 extern SleepLive               live;          // engine -> world (guarded by mux)
 extern NightReport             lastReport;    // most recent saved session (guarded by mux)
 extern SessSample              sessBuf[SESS_MAX];
