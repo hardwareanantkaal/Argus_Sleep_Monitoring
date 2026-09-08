@@ -54,7 +54,7 @@ export default function LiveDataSection({ live, online }) {
   return (
     <section className="dashboard-section live-data-section">
       <div className="section-header-row">
-        <span className="section-badge cyan-bg">1. LIVE DATA</span>
+        {/* <span className="section-badge cyan-bg">1. LIVE DATA</span> */}
         <h2 className="section-title-bold">Real-Time Live Telemetry</h2>
         <span className="section-subtitle-muted">· Direct sensor stream</span>
       </div>

@@ -1,111 +1,46 @@
-import { useEffect, useState, useMemo } from "react";
+import { useState, useMemo } from "react";
 import { Link } from "react-router-dom";
-import { db } from "../firebase.js";
-import { ref, onValue } from "firebase/database";
 import ArgusHeader from "../components/ArgusHeader.jsx";
-import { evaluateDeviceStatus, useTick } from "../utils/status.js";
+import EditDeviceModal from "../components/EditDeviceModal.jsx";
+import { useAuth } from "../utils/AuthContext.jsx";
+import { useLinkedDevices } from "../utils/useLinkedDevices.js";
+import { useDevicesData } from "../utils/useDevicesData.js";
+import { getDeviceDisplayName } from "../utils/deviceDisplay.js";
 import { formatInBed, formatPresence, getEffectiveLiveStage, formatMovement } from "../utils/argusEnums.js";
 
 export default function DeviceList() {
-  const [devices, setDevices] = useState(null);
-  const [lastReceivedMap, setLastReceivedMap] = useState({});
-  const [searchQuery, setSearchQuery] = useState("");
-  const [statusFilter, setStatusFilter] = useState("all");
-
-  const nowMs = useTick(1000);
-
-  useEffect(() => {
-    const devicesRef = ref(db, "devices");
-    const childListeners = new Map();
-
-    const mainUnsub = onValue(
-      devicesRef,
-      (snapshot) => {
-        const data = snapshot.val() || {};
-        const deviceIds = Object.keys(data);
-        setDevices(data);
-
-        // Remove listeners for devices that are no longer in the database
-        for (const [id, unsubFn] of childListeners.entries()) {
-          if (!deviceIds.includes(id)) {
-            unsubFn();
-            childListeners.delete(id);
-            setLastReceivedMap((prev) => {
-              const next = { ...prev };
-              delete next[id];
-              return next;
-            });
-          }
-        }
-
-        // Attach a separate listener for each device path: /devices/${id}
-        deviceIds.forEach((id) => {
-          if (!childListeners.has(id)) {
-            let isInitial = true;
-            const singleDeviceRef = ref(db, `devices/${id}`);
-            const unsubDevice = onValue(
-              singleDeviceRef,
-              (deviceSnap) => {
-                const singleData = deviceSnap.val();
-                setDevices((prev) => ({
-                  ...prev,
-                  [id]: singleData,
-                }));
-
-                // Only update lastReceivedMap for THIS specific device when it emits a real-time update
-                if (!isInitial) {
-                  setLastReceivedMap((prev) => ({
-                    ...prev,
-                    [id]: Date.now(),
-                  }));
-                } else {
-                  isInitial = false;
-                }
-              },
-              (err) => {
-                console.error(`Failed to read /devices/${id}:`, err);
-              }
-            );
-            childListeners.set(id, unsubDevice);
-          }
-        });
-      },
-      (err) => {
-        console.error("Failed to read /devices:", err);
-        setDevices({});
-      }
-    );
-
-    return () => {
-      mainUnsub();
-      for (const unsubFn of childListeners.values()) {
-        unsubFn();
-      }
-      childListeners.clear();
-    };
-  }, []);
+  const { user } = useAuth();
+  const linkedDevices = useLinkedDevices(user?.email);
+  const idsKey = linkedDevices ? linkedDevices.map((d) => d.id).join(",") : "";
+  const linkedIds = useMemo(
+    () => (linkedDevices ? idsKey.split(",").filter(Boolean) : null),
+    [linkedDevices, idsKey]
+  );
+  const liveData = useDevicesData(linkedIds);
+  const liveById = useMemo(() => {
+    const map = {};
+    liveData.forEach((d) => {
+      map[d.id] = d;
+    });
+    return map;
+  }, [liveData]);
 
   const evaluatedDevices = useMemo(() => {
-    if (!devices) return [];
+    if (!linkedDevices) return [];
+    return linkedDevices.map((device) => ({
+      device,
+      ...(liveById[device.id] || {
+        info: {},
+        live: {},
+        status: { online: false },
+        found: false,
+      }),
+    }));
+  }, [linkedDevices, liveById]);
 
-    return Object.entries(devices).map(([id, d]) => {
-      const info = d.info || {};
-      const live = d.live || {};
-      const status = evaluateDeviceStatus({
-        info,
-        live,
-        lastReceivedAt: lastReceivedMap[id],
-        nowMs,
-      });
-
-      return {
-        id,
-        info,
-        live,
-        status,
-      };
-    });
-  }, [devices, lastReceivedMap, nowMs]);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [statusFilter, setStatusFilter] = useState("all");
+  const [editingDevice, setEditingDevice] = useState(null);
 
   const summary = useMemo(() => {
     let onlineCount = 0;
@@ -132,10 +67,11 @@ export default function DeviceList() {
   const filteredDevices = useMemo(() => {
     return evaluatedDevices.filter((dev) => {
       const query = searchQuery.toLowerCase().trim();
+      const displayName = getDeviceDisplayName(dev.device);
       const matchesSearch =
         !query ||
-        dev.id.toLowerCase().includes(query) ||
-        (dev.info.deviceName && dev.info.deviceName.toLowerCase().includes(query));
+        displayName.toLowerCase().includes(query) ||
+        (dev.device.room && dev.device.room.toLowerCase().includes(query));
 
       if (statusFilter === "online") return matchesSearch && dev.status.online;
       if (statusFilter === "offline") return matchesSearch && !dev.status.online;
@@ -148,17 +84,24 @@ export default function DeviceList() {
     <div className="page argus-page">
       <ArgusHeader
         deviceName="Argus Sleep Monitoring"
-        deviceId="MONITOR HUB"
+        deviceLabel="DEVICE HUB"
         online={summary.online > 0}
         lastSeenText={`${summary.online} Online Streams`}
         showBack={false}
       />
 
+      {/* Add Device */}
+      {/* <div className="argus-add-device-row">
+        <Link to="/add-device" className="auth-submit-btn argus-add-device-btn">
+          + Add Device
+        </Link>
+      </div> */}
+
       {/* Summary Row */}
       <div className="argus-summary-row">
         <div className="argus-summary-card">
           <span className="summary-val-big">{summary.total}</span>
-          <span className="summary-lbl-small">Registered Monitors</span>
+          <span className="summary-lbl-small">Registered Devices</span>
         </div>
 
         <div className="argus-summary-card">
@@ -187,7 +130,7 @@ export default function DeviceList() {
           <input
             type="text"
             className="argus-search-input"
-            placeholder="Search monitor ID or node name…"
+            placeholder="Search Device or room name…"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
           />
@@ -222,83 +165,117 @@ export default function DeviceList() {
       </div>
 
       {/* Loading state */}
-      {devices === null && <p className="argus-muted-text">Connecting to Argus Realtime Network…</p>}
+      {linkedDevices === null && <p className="argus-muted-text">Connecting to Argus Realtime Network…</p>}
 
       {/* Empty state */}
-      {devices !== null && filteredDevices.length === 0 && (
+      {linkedDevices !== null && filteredDevices.length === 0 && (
         <p className="argus-muted-text">
           {summary.total === 0
-            ? "No Sensor monitors found in database."
-            : "No monitors match your search query."}
+            ? "No devices linked to your account yet. Use \"Add Device\" above to link one."
+            : "No devices match your search query."}
         </p>
       )}
 
       {/* Device Cards Grid */}
       <div className="argus-devices-grid">
-        {filteredDevices.map(({ id, info, live, status }) => {
+        {filteredDevices.map(({ device, info, live, status, found }) => {
           const inBedStr = formatInBed(live.inBed);
           const presenceStr = formatPresence(live.presence);
-          
+
           const effectiveStage = getEffectiveLiveStage(live);
           const sleepStageStr = effectiveStage.stage;
-          
+
           const rawMotion = formatMovement(live.motion ?? live.movement);
           const motionText = rawMotion === 2 ? "Active" : rawMotion === 1 ? "Still" : "None";
 
           return (
-            <Link to={`/device/${id}`} key={id} className="argus-device-card">
-              <div className="card-top-header">
-                <span className="device-card-name">{info.deviceName || "Argus Monitor Node"}</span>
-                <div className="card-badges-row">
-                  {status.online && info.configMode && (
-                    <span className="argus-chip-small amber-chip" title="Device in Config / OTA Mode">
-                      CONFIG MODE
+            <div key={device.id} className="argus-device-card-wrap">
+              <button
+                className="argus-device-edit-btn"
+                title="Edit this Device"
+                onClick={(e) => {
+                  e.preventDefault();
+                  setEditingDevice(device);
+                }}
+              >
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+                  <path d="M18.5 2.5a2.12 2.12 0 0 1 3 3L12 15l-4 1 1-4Z" />
+                </svg>
+              </button>
+              <div className="argus-device-card">
+                <div className="card-top-header">
+                  <span className="device-card-name">{getDeviceDisplayName(device)}</span>
+                  <div className="card-badges-row">
+                    {status.online && info.configMode && (
+                      <span className="argus-chip-small amber-chip" title="Device in Config / OTA Mode">
+                        CONFIG MODE
+                      </span>
+                    )}
+                    <span className={`argus-chip-small ${status.online ? "green-chip" : "muted-chip"}`}>
+                      {found ? (status.online ? "LIVE" : "OFFLINE") : "NO DATA"}
                     </span>
-                  )}
-                  <span className={`argus-chip-small ${status.online ? "green-chip" : "muted-chip"}`}>
-                    {status.online ? "LIVE" : "OFFLINE"}
-                  </span>
+                  </div>
+                </div>
+
+                {device.room && <div className="device-card-id">{device.room}</div>}
+
+                <div className="device-card-body-grid">
+                  <div className="card-stat-box">
+                    <span className="stat-lbl">Occupancy</span>
+                    <span className="stat-val" style={{ color: inBedStr === "In bed" ? "#10b981" : "#94a3b8" }}>
+                      {inBedStr}
+                    </span>
+                  </div>
+
+                  <div className="card-stat-box">
+                    <span className="stat-lbl">Presence</span>
+                    <span className="stat-val" style={{ color: presenceStr === "Someone is present" ? "#10b981" : "#94a3b8" }}>
+                      {presenceStr === "Someone is present" ? "Present" : "No one"}
+                    </span>
+                  </div>
+
+                  <div className="card-stat-box">
+                    <span className="stat-lbl">Sleep Stage</span>
+                    <span className="stat-val purple-text">{sleepStageStr}</span>
+                  </div>
+
+                  <div className="card-stat-box">
+                    <span className="stat-lbl">Movement</span>
+                    <span className="stat-val amber-text">{motionText}</span>
+                  </div>
+                </div>
+
+                <div className="device-card-actions">
+                  <Link to={`/device/${device.id}`} className="device-card-action-btn live">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <circle cx="12" cy="12" r="2" />
+                      <path d="M8.5 8.5a5 5 0 0 0 0 7" />
+                      <path d="M15.5 8.5a5 5 0 0 1 0 7" />
+                    </svg>
+                    Live Data
+                  </Link>
+                  <Link to={`/device/${device.id}/history`} className="device-card-action-btn history">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <circle cx="12" cy="12" r="9" />
+                      <polyline points="12 7 12 12 16 14" />
+                    </svg>
+                    History
+                  </Link>
                 </div>
               </div>
-
-
-              <div className="device-card-id">{id}</div>
-
-              <div className="device-card-body-grid">
-                <div className="card-stat-box">
-                  <span className="stat-lbl">Occupancy</span>
-                  <span className="stat-val" style={{ color: inBedStr === "In bed" ? "#10b981" : "#94a3b8" }}>
-                    {inBedStr}
-                  </span>
-                </div>
-
-                <div className="card-stat-box">
-                  <span className="stat-lbl">Presence</span>
-                  <span className="stat-val" style={{ color: presenceStr === "Someone is present" ? "#10b981" : "#94a3b8" }}>
-                    {presenceStr === "Someone is present" ? "Present" : "No one"}
-                  </span>
-                </div>
-
-                <div className="card-stat-box">
-                  <span className="stat-lbl">Sleep Stage</span>
-                  <span className="stat-val purple-text">
-                    {sleepStageStr}
-                  </span>
-                </div>
-
-                <div className="card-stat-box">
-                  <span className="stat-lbl">Movement</span>
-                  <span className="stat-val amber-text">
-                    {motionText}
-                  </span>
-                </div>
-              </div>
-            </Link>
+            </div>
           );
         })}
       </div>
+
+      {editingDevice && (
+        <EditDeviceModal
+          email={user.email}
+          device={editingDevice}
+          onClose={() => setEditingDevice(null)}
+        />
+      )}
     </div>
   );
 }
-
-

@@ -76,8 +76,8 @@ export function formatRelativeTime(timestampMs, nowMs = Date.now()) {
   return `${days}d ago`;
 }
 
-// 15 seconds threshold: Device is marked offline after 15 seconds of silence/no data sent.
-export const DEFAULT_ONLINE_THRESHOLD_MS = 15000;
+// 30 seconds threshold: Device is marked offline after 30 seconds of silence/no data sent.
+export const DEFAULT_ONLINE_THRESHOLD_MS = 30000;
 
 /**
  * Evaluates online status of a device based on Firebase data & reception time.

@@ -18,7 +18,7 @@ export default function CompositeSection({ live }) {
   return (
     <section className="dashboard-section composite-section">
       <div className="section-header-row">
-        <span className="section-badge purple-bg">2. COMPOSITE</span>
+        {/* <span className="section-badge purple-bg">2. COMPOSITE</span> */}
         <h2 className="section-title-bold">Composite Telemetry & Firmware Diagnostics</h2>
         <span className="section-subtitle-muted">· Diagnostic monitors & rolling averages</span>
       </div>

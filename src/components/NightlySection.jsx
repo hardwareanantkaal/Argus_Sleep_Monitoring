@@ -29,7 +29,7 @@ export default function NightlySection({ live }) {
   return (
     <section className="dashboard-section nightly-section">
       <div className="section-header-row">
-        <span className="section-badge emerald-bg">3. NIGHTLY</span>
+        {/* <span className="section-badge emerald-bg">3. NIGHTLY</span> */}
         <h2 className="section-title-bold">Nightly Session Telemetry (nightly)</h2>
         <span className="section-subtitle-muted">· Overnight session parameters</span>
       </div>
@@ -142,7 +142,7 @@ export default function NightlySection({ live }) {
       </div>
 
       {/* Automated Diagnostic Insight Box */}
-      <div className="argus-insight-box" style={{ marginTop: "20px" }}>
+      {/* <div className="argus-insight-box" style={{ marginTop: "20px" }}>
         <div className="insight-box-header">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#06b6d4" strokeWidth="2.2">
             <circle cx="12" cy="12" r="10" />
@@ -154,7 +154,7 @@ export default function NightlySection({ live }) {
         <p className="insight-box-body">
           Recorded Nightly Session: <strong>{durationStr}</strong> asleep, <strong>{sScore}/100</strong> score rating. Deep sleep: <strong>{sDeep}%</strong>, Light sleep: <strong>{sShallow}%</strong>, Awake duration: <strong>{sWake}m</strong>. Disruptions recorded: <strong>{sApnea}</strong> apnea events, <strong>{sExit}</strong> bed exits, and <strong>{sTurn}</strong> turnovers.
         </p>
-      </div>
+      </div> */}
     </section>
   );
 }

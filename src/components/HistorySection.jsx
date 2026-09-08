@@ -3,6 +3,8 @@ import { db } from "../firebase.js";
 import { ref, remove } from "firebase/database";
 import SleepStageChart from "./SleepStageChart.jsx";
 import { getDeviceTimestampMs } from "../utils/status.js";
+import { useAuth } from "../utils/AuthContext.jsx";
+import { removeMirroredSession } from "../utils/deviceHistorySync.js";
 
 function parseSessionTimeToMs(timeStr) {
   if (timeStr === undefined || timeStr === null || timeStr === "") return null;
@@ -35,6 +37,7 @@ function formatHoursMinutes(totalMinutes) {
 }
 
 export default function HistorySection({ deviceId, history }) {
+  const { user } = useAuth();
   const [isDeleting, setIsDeleting] = useState(false);
 
   const sessionEntries = history && typeof history === "object" ? Object.entries(history) : [];
@@ -72,6 +75,9 @@ export default function HistorySection({ deviceId, history }) {
       setIsDeleting(true);
       const sessionRef = ref(db, `devices/${deviceId}/history/${sessionId}`);
       await remove(sessionRef);
+      removeMirroredSession(user.email, deviceId, sessionId).catch((err) => {
+        console.error(`Failed to remove mirrored history session ${sessionId}:`, err);
+      });
       alert(`Session "${sessionId}" has been removed from Firebase.`);
     } catch (err) {
       console.error("Failed to remove session:", err);
@@ -158,7 +164,7 @@ export default function HistorySection({ deviceId, history }) {
   return (
     <section className="dashboard-section history-section" style={{ marginTop: "36px" }}>
       <div className="section-header-row">
-        <span className="section-badge purple-bg">5. HISTORY</span>
+        {/* <span className="section-badge purple-bg">5. HISTORY</span> */}
         <h2 className="section-title-bold">Session History & Staging Logs (/history)</h2>
         <span className="section-subtitle-muted">
           · {sortedSessions.length} {sortedSessions.length === 1 ? "Session" : "Sessions"} Recorded

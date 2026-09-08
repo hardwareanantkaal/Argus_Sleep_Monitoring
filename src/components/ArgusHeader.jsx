@@ -1,18 +1,27 @@
 import React from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { useTheme } from "../utils/theme.js";
+import { useAuth } from "../utils/AuthContext.jsx";
 
 export default function ArgusHeader({
   deviceName,
-  deviceId,
+  deviceLabel,
   online,
   lastSeenText,
   rssi,
   configMode = false,
   showBack = true,
+  showStatus = true,
 }) {
   const { theme, toggleTheme } = useTheme();
+  const { logout } = useAuth();
+  const navigate = useNavigate();
   const localTimeStr = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+
+  const handleLogout = async () => {
+    await logout();
+    navigate("/login", { replace: true });
+  };
 
   return (
     <div className="argus-header-sticky-wrapper">
@@ -45,9 +54,7 @@ export default function ArgusHeader({
 
           <div className="argus-brand-text">
             <h1 className="argus-app-title">{deviceName || "Argus Sleep Monitor"}</h1>
-            <span className="argus-app-tagline">
-              {deviceId ? `NODE · ${deviceId}` : ""}
-            </span>
+            <span className="argus-app-tagline">{deviceLabel || ""}</span>
           </div>
         </div>
 
@@ -81,24 +88,54 @@ export default function ArgusHeader({
             <span className="theme-toggle-label">{theme === "dark" ? "Light" : "Dark"}</span>
           </button>
 
+          <Link to="/add-device" className="argus-theme-toggle-btn" title="Add a monitor">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
+              <circle cx="12" cy="12" r="9" />
+              <line x1="12" y1="8" x2="12" y2="16" />
+              <line x1="8" y1="12" x2="16" y2="12" />
+            </svg>
+            <span className="theme-toggle-label">Add Device</span>
+          </Link>
+
+          <Link to="/profile" className="argus-theme-toggle-btn" title="Your profile">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
+              <circle cx="12" cy="8" r="4" />
+              <path d="M4 20c0-4 4-6 8-6s8 2 8 6" />
+            </svg>
+            <span className="theme-toggle-label">Profile</span>
+          </Link>
+
+          <button className="argus-theme-toggle-btn" onClick={handleLogout} title="Sign out">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
+              <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+              <polyline points="16 17 21 12 16 7" />
+              <line x1="21" y1="12" x2="9" y2="12" />
+            </svg>
+            <span className="theme-toggle-label">Sign Out</span>
+          </button>
+
           {configMode && (
             <span className="argus-chip-small amber-chip" title="Config Mode Active">
               CONFIG MODE ACTIVE
             </span>
           )}
 
-          <div className={`argus-status-chip ${online ? "online" : "offline"}`}>
-            <span className="argus-status-dot" />
-            <span className="argus-status-label">{online ? "LIVE STREAM" : "OFFLINE"}</span>
-          </div>
+          {showStatus && (
+            <div className={`argus-status-chip ${online ? "online" : "offline"}`}>
+              <span className="argus-status-dot" />
+              <span className="argus-status-label">{online ? "LIVE STREAM" : "OFFLINE"}</span>
+            </div>
+          )}
 
-          <div className="argus-header-metrics">
-            <span className="header-time-text">{localTimeStr}</span>
-            {rssi !== undefined && <span className="dim-divider">·</span>}
-            {rssi !== undefined && <span className="header-rssi-text">{rssi} dBm</span>}
-            <span className="dim-divider">·</span>
-            <span className="header-uptime-text">{statusText(online, lastSeenText)}</span>
-          </div>
+          {showStatus && (
+            <div className="argus-header-metrics">
+              <span className="header-time-text">{localTimeStr}</span>
+              {rssi !== undefined && <span className="dim-divider">·</span>}
+              {rssi !== undefined && <span className="header-rssi-text">{rssi} dBm</span>}
+              <span className="dim-divider">·</span>
+              <span className="header-uptime-text">{statusText(online, lastSeenText)}</span>
+            </div>
+          )}
         </div>
       </header>
     </div>
@@ -106,6 +143,6 @@ export default function ArgusHeader({
 }
 
 function statusText(online, lastSeenText) {
-  if (online) return `Updated ${lastSeenText || "just now"}`;
+  if (online) return "Updated Just now";
   return `Last seen ${lastSeenText || "recently"}`;
 }

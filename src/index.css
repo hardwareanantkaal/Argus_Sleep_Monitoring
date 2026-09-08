@@ -421,6 +421,100 @@ body {
 }
 
 /* ==========================================================================
+   Device Switcher (Live Stream / History pages)
+   ========================================================================== */
+
+.device-switcher {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  padding-bottom: 4px;
+  margin-bottom: 20px;
+}
+
+.device-switcher-chip {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+  padding: 8px 14px;
+  border-radius: 12px;
+  background: var(--bg-card);
+  border: 1px solid var(--border-card);
+  color: var(--text-muted);
+  text-decoration: none;
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+  transition: all 0.2s ease;
+}
+
+.device-switcher-chip:hover {
+  border-color: var(--border-card-hover);
+  color: var(--text-main);
+}
+
+.device-switcher-chip.active {
+  background: rgba(6, 182, 212, 0.15);
+  border-color: var(--cyan-accent);
+  color: var(--cyan-accent);
+}
+
+.device-switcher-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.device-switcher-dot.online {
+  background: var(--emerald-accent);
+  box-shadow: 0 0 6px var(--emerald-accent);
+}
+
+.device-switcher-dot.offline {
+  background: var(--text-subtle);
+}
+
+.device-switcher-empty {
+  font-size: 13px;
+  color: var(--text-muted);
+  margin-bottom: 20px;
+}
+
+.device-switcher-empty a {
+  color: var(--cyan-accent);
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.device-switcher-empty a:hover {
+  text-decoration: underline;
+}
+
+/* ==========================================================================
+   Offline Warning Banner
+   ========================================================================== */
+
+.argus-offline-warning-banner {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: rgba(244, 63, 94, 0.08);
+  border: 1px solid rgba(244, 63, 94, 0.3);
+  border-radius: 14px;
+  padding: 12px 18px;
+  margin-bottom: 20px;
+  color: var(--rose-accent);
+  font-size: 13.5px;
+  font-weight: 600;
+}
+
+.argus-offline-warning-banner svg {
+  flex-shrink: 0;
+}
+
+/* ==========================================================================
    Placement Check & Signal Calibration Modal
    ========================================================================== */
 
@@ -1109,6 +1203,80 @@ body {
 }
 
 /* Device List Page Components */
+.argus-add-device-row {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 10px;
+  flex-wrap: wrap;
+}
+
+.argus-add-device-row .argus-search-input {
+  flex: 1;
+  min-width: 240px;
+  padding-left: 14px;
+}
+
+.argus-add-device-btn {
+  margin-top: 0;
+  white-space: nowrap;
+  padding: 10px 20px;
+}
+
+.argus-add-device-error {
+  margin-bottom: 14px;
+}
+
+.argus-device-card-wrap {
+  position: relative;
+}
+
+.argus-device-edit-btn {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  z-index: 2;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  border: 1px solid var(--border-card);
+  background: var(--bg-card);
+  color: var(--text-muted);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+}
+
+.argus-device-edit-btn:hover {
+  background: rgba(6, 182, 212, 0.15);
+  border-color: var(--cyan-accent);
+  color: var(--cyan-accent);
+}
+
+.edit-device-delete-btn {
+  margin-top: 4px;
+  background: rgba(244, 63, 94, 0.1);
+  border: 1px solid rgba(244, 63, 94, 0.3);
+  color: var(--rose-accent);
+  font-family: var(--font-sans);
+  font-size: 13px;
+  font-weight: 700;
+  padding: 10px 16px;
+  border-radius: 12px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.edit-device-delete-btn:hover:not(:disabled) {
+  background: rgba(244, 63, 94, 0.2);
+}
+
+.edit-device-delete-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
 .argus-summary-row {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
@@ -1252,6 +1420,47 @@ body {
   margin-top: auto;
 }
 
+.device-card-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.device-card-action-btn {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  font-size: 13px;
+  font-weight: 700;
+  text-decoration: none;
+  border: 1px solid transparent;
+  transition: all 0.2s ease;
+}
+
+.device-card-action-btn.live {
+  background: rgba(6, 182, 212, 0.15);
+  color: var(--cyan-accent);
+  border-color: rgba(6, 182, 212, 0.3);
+}
+
+.device-card-action-btn.live:hover {
+  background: rgba(6, 182, 212, 0.25);
+}
+
+.device-card-action-btn.history {
+  background: rgba(129, 140, 248, 0.15);
+  color: var(--purple-accent);
+  border-color: rgba(129, 140, 248, 0.3);
+}
+
+.device-card-action-btn.history:hover {
+  background: rgba(129, 140, 248, 0.25);
+}
+
 .card-stat-box {
   display: flex;
   flex-direction: column;
@@ -1259,6 +1468,200 @@ body {
 
 .stat-lbl { font-size: 11px; color: var(--text-subtle); }
 .stat-val { font-size: 13px; font-weight: 700; margin-top: 2px; }
+
+/* ==========================================================================
+   Auth Pages (Login / Register)
+   ========================================================================== */
+
+.auth-page {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+
+.auth-card {
+  width: 100%;
+  max-width: 400px;
+  background: var(--bg-card);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  border: 1px solid var(--border-card);
+  border-radius: 22px;
+  padding: 32px 28px;
+  box-shadow: var(--card-shadow);
+}
+
+.auth-brand {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  margin-bottom: 28px;
+}
+
+.auth-brand .argus-brand-logo {
+  margin-bottom: 14px;
+}
+
+.auth-title {
+  font-size: 22px;
+  font-weight: 800;
+  color: var(--text-main);
+  letter-spacing: -0.3px;
+}
+
+.auth-subtitle {
+  font-size: 13px;
+  color: var(--text-muted);
+  margin-top: 6px;
+}
+
+.auth-form {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.auth-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.auth-field-label {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-muted);
+  letter-spacing: 0.3px;
+}
+
+.auth-input {
+  padding: 11px 14px;
+}
+
+/* Hide native browser password reveal/clear icons (Edge, IE) */
+input[type="password"]::-ms-reveal,
+input[type="password"]::-ms-clear {
+  display: none;
+}
+
+.auth-error {
+  background: rgba(244, 63, 94, 0.12);
+  border: 1px solid rgba(244, 63, 94, 0.3);
+  color: var(--rose-accent);
+  font-size: 13px;
+  font-weight: 600;
+  padding: 10px 12px;
+  border-radius: 10px;
+}
+
+.auth-success {
+  background: rgba(16, 185, 129, 0.12);
+  border: 1px solid rgba(16, 185, 129, 0.3);
+  color: var(--emerald-accent);
+  font-size: 13px;
+  font-weight: 600;
+  padding: 10px 12px;
+  border-radius: 10px;
+}
+
+.auth-submit-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin-top: 4px;
+  background: linear-gradient(135deg, #06b6d4, #6366f1);
+  border: none;
+  color: #ffffff;
+  font-family: var(--font-sans);
+  font-size: 14px;
+  font-weight: 700;
+  padding: 12px 16px;
+  border-radius: 12px;
+  cursor: pointer;
+  text-decoration: none;
+  transition: all 0.2s ease;
+}
+
+.auth-submit-btn:hover:not(:disabled) {
+  filter: brightness(1.08);
+  transform: translateY(-1px);
+  box-shadow: 0 8px 20px rgba(6, 182, 212, 0.3);
+}
+
+.auth-submit-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.auth-switch-text {
+  text-align: center;
+  font-size: 13px;
+  color: var(--text-muted);
+  margin-top: 22px;
+}
+
+.auth-switch-text a {
+  color: var(--cyan-accent);
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.auth-switch-text a:hover {
+  text-decoration: underline;
+}
+
+.qr-scan-btn {
+  width: 100%;
+  background: linear-gradient(135deg, #06b6d4, #6366f1);
+}
+
+.auth-divider {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 18px 0;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-subtle);
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+}
+
+.auth-divider::before,
+.auth-divider::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: var(--border-card);
+}
+
+.qr-scanner-hint {
+  font-size: 13px;
+  margin-bottom: 14px;
+}
+
+.qr-scanner-region {
+  width: 100%;
+  min-height: 260px;
+  border-radius: 16px;
+  overflow: hidden;
+  background: #000;
+}
+
+.qr-scanner-region video {
+  display: block;
+  width: 100% !important;
+  border-radius: 16px;
+}
+
+@media (max-width: 480px) {
+  .auth-card {
+    padding: 26px 20px;
+  }
+}
 
 /* Responsive Breakpoints */
 @media (max-width: 640px) {
@@ -1294,6 +1697,22 @@ body {
 
   .argus-summary-row {
     grid-template-columns: 1fr 1fr;
+  }
+
+  .argus-theme-toggle-btn {
+    padding: 0;
+    width: 34px;
+    height: 34px;
+    justify-content: center;
+    border-radius: 50%;
+  }
+
+  .theme-toggle-label {
+    display: none;
+  }
+
+  .argus-header-metrics {
+    display: none;
   }
 }
 
