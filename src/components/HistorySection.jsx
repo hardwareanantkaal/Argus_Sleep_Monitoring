@@ -1,8 +1,13 @@
-import React, { useState } from "react";
+import React, { useState, useMemo } from "react";
 import { db } from "../firebase.js";
 import { ref, remove } from "firebase/database";
 import SleepStageChart from "./SleepStageChart.jsx";
-import { removeMirroredSession, isSessionStillInProgress, parseSessionTimeMs } from "../utils/deviceHistorySync.js";
+import {
+  removeMirroredSession,
+  isSessionStillInProgress,
+  parseSessionTimeMs,
+  smoothSleepTimeline,
+} from "../utils/deviceHistorySync.js";
 
 const isSessionInProgress = isSessionStillInProgress;
 
@@ -66,6 +71,26 @@ export default function HistorySection({ deviceId, history }) {
 
   const activeSession = activeSessionId ? history[activeSessionId] : null;
 
+  // Radar-based Light/Deep classification flip-flops every couple of minutes
+  // (see conversation history) — smooth it into realistic-length stretches for
+  // display, without touching the underlying stored session data.
+  const smoothed = useMemo(() => {
+    if (!activeSession || isSessionInProgress(activeSession)) return null;
+    return smoothSleepTimeline(activeSession.sleepTimeline, activeSession.startTime, activeSession.endTime);
+  }, [activeSession]);
+
+  const displaySession = smoothed
+    ? {
+        ...activeSession,
+        sleepTimeline: smoothed.timeline,
+        deepMin: smoothed.deepMin,
+        lightMin: smoothed.lightMin,
+        deepPct: smoothed.deepPct,
+        lightPct: smoothed.lightPct,
+        smoothedNote: "Deep/Light Sleep and the stage timeline are smoothed (20-min sliding-window majority vote) to reduce sensor noise; other fields are as recorded.",
+      }
+    : activeSession;
+
   const handleRemoveSession = async (sessionId) => {
     if (!sessionId) return;
     const confirmDelete = window.confirm(
@@ -123,6 +148,7 @@ export default function HistorySection({ deviceId, history }) {
       ["Avg Heart Rate (BPM)", session?.avgHR ?? 0],
       ["Avg Respiration (RPM)", session?.avgBR ?? 0],
       ["Exported At", new Date().toLocaleString()],
+      ...(session?.smoothedNote ? [["Note", session.smoothedNote]] : []),
     ];
 
     lines.push(["=== Argus Sleep Session Summary (one row: headers above, values below) ==="]);
@@ -242,7 +268,7 @@ export default function HistorySection({ deviceId, history }) {
                     {/* Download CSV Button */}
                     <button
                       type="button"
-                      onClick={() => handleDownloadCsv(activeSessionId, activeSession)}
+                      onClick={() => handleDownloadCsv(activeSessionId, displaySession)}
                       style={{
                         display: "inline-flex",
                         alignItems: "center",
@@ -328,17 +354,17 @@ export default function HistorySection({ deviceId, history }) {
                 <div className="analytics-hero-card">
                   <span className="hero-card-lbl">Deep Rest Ratio</span>
                   <div className="hero-card-val-row">
-                    <span className="hero-card-val purple-val">{activeSession.deepPct ?? 0}%</span>
+                    <span className="hero-card-val purple-val">{displaySession.deepPct ?? 0}%</span>
                   </div>
-                  <span className="hero-card-sub">{formatHoursMinutes(activeSession.deepMin ?? 0)} ({activeSession.deepMin ?? 0}m deep)</span>
+                  <span className="hero-card-sub">{formatHoursMinutes(displaySession.deepMin ?? 0)} ({displaySession.deepMin ?? 0}m deep)</span>
                 </div>
 
                 <div className="analytics-hero-card">
                   <span className="hero-card-lbl">Light Rest Ratio</span>
                   <div className="hero-card-val-row">
-                    <span className="hero-card-val emerald-val">{activeSession.lightPct ?? 0}%</span>
+                    <span className="hero-card-val emerald-val">{displaySession.lightPct ?? 0}%</span>
                   </div>
-                  <span className="hero-card-sub">{formatHoursMinutes(activeSession.lightMin ?? 0)} ({activeSession.lightMin ?? 0}m light)</span>
+                  <span className="hero-card-sub">{formatHoursMinutes(displaySession.lightMin ?? 0)} ({displaySession.lightMin ?? 0}m light)</span>
                 </div>
 
                 <div className="analytics-hero-card">
@@ -399,7 +425,8 @@ export default function HistorySection({ deviceId, history }) {
 
               {/* Session Sleep Stage Chart */}
               <SleepStageChart
-                sleepTimeline={activeSession.sleepTimeline}
+                sleepTimeline={displaySession.sleepTimeline}
+                endTime={activeSession.endTime}
                 title={`Sleep Stage Timeline Graph — Session ${sessionLabels[activeSessionId] || activeSessionId}`}
               />
             </div>

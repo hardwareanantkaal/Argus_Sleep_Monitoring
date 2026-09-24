@@ -1,7 +1,8 @@
 import React from "react";
 import { parseSleepTimeline } from "../utils/argusEnums.js";
+import { parseSessionTimeMs, timeOfDayToMs } from "../utils/deviceHistorySync.js";
 
-export default function SleepStageChart({ sleepTimeline, title = "Sleep Stage Timeline Graph", hideIfEmpty = true }) {
+export default function SleepStageChart({ sleepTimeline, title = "Sleep Stage Timeline Graph", hideIfEmpty = true, endTime }) {
   const parsed = parseSleepTimeline(sleepTimeline);
 
   if (parsed.length === 0 && hideIfEmpty) {
@@ -16,22 +17,41 @@ export default function SleepStageChart({ sleepTimeline, title = "Sleep Stage Ti
     return { label: "Awake", level: 0, y: 30, color: "#64748b", bg: "rgba(148, 163, 184, 0.12)" };
   };
 
-  // Calculate Stage Stats
+  // Calculate Stage Stats. When endTime is given (history view), weight by how
+  // long each stage actually lasted; otherwise (live view) fall back to the
+  // original per-point count so nothing changes there.
   let deepCount = 0;
   let lightCount = 0;
   let awakeCount = 0;
+  const endMs = endTime ? parseSessionTimeMs(endTime) : null;
 
-  parsed.forEach((item) => {
-    const meta = getStageLevel(item.stage);
-    if (meta.label === "Deep") deepCount++;
-    else if (meta.label === "Light") lightCount++;
-    else if (meta.label === "Awake") awakeCount++;
-  });
+  if (endMs !== null) {
+    for (let i = 0; i < parsed.length; i++) {
+      const meta = getStageLevel(parsed[i].stage);
+      const startMs = timeOfDayToMs(parsed[i].time, endMs);
+      const nextMs = i + 1 < parsed.length ? timeOfDayToMs(parsed[i + 1].time, endMs) : endMs;
+      const durMin = startMs !== null && nextMs !== null ? Math.max(0, (nextMs - startMs) / 60000) : 0;
+      if (meta.label === "Deep") deepCount += durMin;
+      else if (meta.label === "Light") lightCount += durMin;
+      else if (meta.label === "Awake") awakeCount += durMin;
+    }
+    deepCount = Math.round(deepCount);
+    lightCount = Math.round(lightCount);
+    awakeCount = Math.round(awakeCount);
+  } else {
+    parsed.forEach((item) => {
+      const meta = getStageLevel(item.stage);
+      if (meta.label === "Deep") deepCount++;
+      else if (meta.label === "Light") lightCount++;
+      else if (meta.label === "Awake") awakeCount++;
+    });
+  }
 
-  const total = parsed.length || 1;
+  const total = deepCount + lightCount + awakeCount || 1;
   const deepPct = Math.round((deepCount / total) * 100);
   const lightPct = Math.round((lightCount / total) * 100);
   const awakePct = Math.round((awakeCount / total) * 100);
+  const countUnit = endMs !== null ? "min" : "";
 
   // Dynamic Width Calculation based on total points to prevent label overlap
   const paddingLeft = 70;
@@ -115,7 +135,9 @@ export default function SleepStageChart({ sleepTimeline, title = "Sleep Stage Ti
             >
               <span style={{ fontSize: "11px", color: "var(--text-subtle)", fontWeight: "600" }}>Deep Sleep</span>
               <div style={{ fontSize: "20px", fontWeight: "800", color: "#818cf8", marginTop: "2px" }}>
-                {deepCount} <span style={{ fontSize: "12px", color: "var(--text-muted)", fontWeight: "600" }}>({deepPct}%)</span>
+                {deepCount}
+                {countUnit && <span style={{ fontSize: "12px" }}> {countUnit}</span>}{" "}
+                <span style={{ fontSize: "12px", color: "var(--text-muted)", fontWeight: "600" }}>({deepPct}%)</span>
               </div>
               <span style={{ fontSize: "11px", color: "var(--text-subtle)" }}>Restorative stage</span>
             </div>
@@ -130,7 +152,9 @@ export default function SleepStageChart({ sleepTimeline, title = "Sleep Stage Ti
             >
               <span style={{ fontSize: "11px", color: "var(--text-subtle)", fontWeight: "600" }}>Light Sleep</span>
               <div style={{ fontSize: "20px", fontWeight: "800", color: "#06b6d4", marginTop: "2px" }}>
-                {lightCount} <span style={{ fontSize: "12px", color: "var(--text-muted)", fontWeight: "600" }}>({lightPct}%)</span>
+                {lightCount}
+                {countUnit && <span style={{ fontSize: "12px" }}> {countUnit}</span>}{" "}
+                <span style={{ fontSize: "12px", color: "var(--text-muted)", fontWeight: "600" }}>({lightPct}%)</span>
               </div>
               <span style={{ fontSize: "11px", color: "var(--text-subtle)" }}>Shallow rest stage</span>
             </div>
@@ -145,7 +169,9 @@ export default function SleepStageChart({ sleepTimeline, title = "Sleep Stage Ti
             >
               <span style={{ fontSize: "11px", color: "var(--text-subtle)", fontWeight: "600" }}>Awake Periods</span>
               <div style={{ fontSize: "20px", fontWeight: "800", color: "#f59e0b", marginTop: "2px" }}>
-                {awakeCount} <span style={{ fontSize: "12px", color: "var(--text-muted)", fontWeight: "600" }}>({awakePct}%)</span>
+                {awakeCount}
+                {countUnit && <span style={{ fontSize: "12px" }}> {countUnit}</span>}{" "}
+                <span style={{ fontSize: "12px", color: "var(--text-muted)", fontWeight: "600" }}>({awakePct}%)</span>
               </div>
               <span style={{ fontSize: "11px", color: "var(--text-subtle)" }}>Awakenings in bed</span>
             </div>
