@@ -2,24 +2,26 @@ import React, { useState } from "react";
 import { db } from "../firebase.js";
 import { ref, remove } from "firebase/database";
 import SleepStageChart from "./SleepStageChart.jsx";
-import { getDeviceTimestampMs } from "../utils/status.js";
-import { useAuth } from "../utils/AuthContext.jsx";
-import { removeMirroredSession } from "../utils/deviceHistorySync.js";
+import { removeMirroredSession, isSessionStillInProgress, parseSessionTimeMs } from "../utils/deviceHistorySync.js";
 
-function parseSessionTimeToMs(timeStr) {
-  if (timeStr === undefined || timeStr === null || timeStr === "") return null;
-  const fakeLive = { timeStr };
-  return getDeviceTimestampMs(null, fakeLive);
-}
+const isSessionInProgress = isSessionStillInProgress;
 
-function isSessionInProgress(session, nowMs = Date.now()) {
-  if (!session) return false;
-  const fbFlag = Boolean(session.inProgress);
-  const endMs = parseSessionTimeToMs(session.endTime);
-  if (endMs !== null && endMs < nowMs) {
-    return false;
-  }
-  return fbFlag;
+// Friendly labels like "2026-09-24 S1", "2026-09-24 S2" for sessions ending on
+// the same day, numbered in the order they actually happened — the raw doc IDs
+// (epoch-based, e.g. "s1790228507") stay as the real identifier underneath.
+function buildSessionLabels(entries) {
+  const chronological = entries
+    .slice()
+    .sort((a, b) => (parseSessionTimeMs(a[1]?.endTime) ?? 0) - (parseSessionTimeMs(b[1]?.endTime) ?? 0));
+
+  const countByDate = {};
+  const labels = {};
+  chronological.forEach(([id, session]) => {
+    const dateStr = (session?.endTime || session?.startTime || "").slice(0, 10) || "Unknown date";
+    countByDate[dateStr] = (countByDate[dateStr] || 0) + 1;
+    labels[id] = `${dateStr} S${countByDate[dateStr]}`;
+  });
+  return labels;
 }
 
 function formatHoursMinutes(totalMinutes) {
@@ -37,10 +39,10 @@ function formatHoursMinutes(totalMinutes) {
 }
 
 export default function HistorySection({ deviceId, history }) {
-  const { user } = useAuth();
   const [isDeleting, setIsDeleting] = useState(false);
 
   const sessionEntries = history && typeof history === "object" ? Object.entries(history) : [];
+  const sessionLabels = buildSessionLabels(sessionEntries);
 
   // Sort sessions with active/recent sessions first (use effective inProgress)
   const sortedSessions = sessionEntries.sort((a, b) => {
@@ -75,7 +77,7 @@ export default function HistorySection({ deviceId, history }) {
       setIsDeleting(true);
       const sessionRef = ref(db, `devices/${deviceId}/history/${sessionId}`);
       await remove(sessionRef);
-      removeMirroredSession(user.email, deviceId, sessionId).catch((err) => {
+      removeMirroredSession(deviceId, sessionId).catch((err) => {
         console.error(`Failed to remove mirrored history session ${sessionId}:`, err);
       });
       alert(`Session "${sessionId}" has been removed from Firebase.`);
@@ -100,7 +102,7 @@ export default function HistorySection({ deviceId, history }) {
     const lines = [];
 
     const summaryFields = [
-      ["Session ID", sessionId],
+      ["Session", sessionLabels[sessionId] || sessionId],
       ["Device ID", deviceId ?? ""],
       ["Status", isSessionInProgress(session) ? "LIVE IN PROGRESS" : "COMPLETED"],
       ["Start Time", session?.startTime ?? ""],
@@ -152,7 +154,7 @@ export default function HistorySection({ deviceId, history }) {
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     const safeDev = String(deviceId ?? "unknownDevice").replace(/[^\w.-]+/g, "_");
-    const safeSes = String(sessionId).replace(/[^\w.-]+/g, "_");
+    const safeSes = String(sessionLabels[sessionId] || sessionId).replace(/[^\w.-]+/g, "_");
     a.href = url;
     a.download = `Argus-${safeDev}-${safeSes}.csv`;
     document.body.appendChild(a);
@@ -205,7 +207,7 @@ export default function HistorySection({ deviceId, history }) {
                     transition: "all 0.2s ease",
                   }}
                 >
-                  <span>{id}</span>
+                  <span>{sessionLabels[id] || id}</span>
                   {inProgress ? (
                     <span className="argus-chip-small green-chip" style={{ fontSize: "10px", padding: "2px 6px" }}>
                       LIVE
@@ -227,7 +229,7 @@ export default function HistorySection({ deviceId, history }) {
                 <div>
                   <div style={{ display: "flex", alignItems: "center", gap: "12px", flexWrap: "wrap" }}>
                     <h3 style={{ fontSize: "18px", fontWeight: "800", color: "var(--text-main)" }}>
-                      Session: {activeSessionId}
+                      Session: {sessionLabels[activeSessionId] || activeSessionId}
                     </h3>
                     {(() => {
                       const liveNow = isSessionInProgress(activeSession);
@@ -398,7 +400,7 @@ export default function HistorySection({ deviceId, history }) {
               {/* Session Sleep Stage Chart */}
               <SleepStageChart
                 sleepTimeline={activeSession.sleepTimeline}
-                title={`Sleep Stage Timeline Graph — Session ${activeSessionId}`}
+                title={`Sleep Stage Timeline Graph — Session ${sessionLabels[activeSessionId] || activeSessionId}`}
               />
             </div>
           )}

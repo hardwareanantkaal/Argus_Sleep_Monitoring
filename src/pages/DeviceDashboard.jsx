@@ -9,37 +9,28 @@ import CompositeSection from "../components/CompositeSection.jsx";
 import NightlySection from "../components/NightlySection.jsx";
 import DeviceSettingsPanel from "../components/DeviceSettingsPanel.jsx";
 import PlacementCheckModal from "../components/PlacementCheckModal.jsx";
-import DeviceOwnershipGate from "../components/DeviceOwnershipGate.jsx";
-import DeviceSwitcher from "../components/DeviceSwitcher.jsx";
 import { evaluateDeviceStatus, useTick } from "../utils/status.js";
-import { useAuth } from "../utils/AuthContext.jsx";
-import { useDeviceOwnership } from "../utils/useDeviceOwnership.js";
 import { getDeviceDisplayName } from "../utils/deviceDisplay.js";
 import { setLastDeviceId } from "../utils/lastDevice.js";
+import { normalizeMacNoColons } from "../utils/mac.js";
 
 export default function DeviceDashboard() {
   const { deviceId: rawDeviceId } = useParams();
-  const { user } = useAuth();
+  const deviceId = normalizeMacNoColons(rawDeviceId);
   const [info, setInfo] = useState(null);
   const [live, setLive] = useState(null);
   const [lastReceivedAt, setLastReceivedAt] = useState(null);
   const [isPlacementOpen, setIsPlacementOpen] = useState(false);
   const [updatingConfig, setUpdatingConfig] = useState(false);
 
-  const { ownershipChecked, isOwned, deviceRecord, deviceId, linking, linkError, linkThisDevice } = useDeviceOwnership(
-    user.email,
-    rawDeviceId
-  );
-
   const nowMs = useTick(1000);
 
   // Remember this as the last-viewed device, for the sidebar's Live Stream / History shortcuts
   useEffect(() => {
-    if (isOwned) setLastDeviceId(deviceId);
-  }, [isOwned, deviceId]);
+    setLastDeviceId(deviceId);
+  }, [deviceId]);
 
   useEffect(() => {
-    if (!isOwned) return;
     const infoRef = ref(db, `devices/${deviceId}/info`);
     const liveRef = ref(db, `devices/${deviceId}/live`);
 
@@ -62,7 +53,7 @@ export default function DeviceDashboard() {
       unsubInfo();
       unsubLive();
     };
-  }, [isOwned, deviceId]);
+  }, [deviceId]);
 
   const status = evaluateDeviceStatus({
     info,
@@ -103,26 +94,16 @@ export default function DeviceDashboard() {
   const isConfigActive = status.online && Boolean(info?.configMode);
 
   return (
-    <DeviceOwnershipGate
-      ownershipChecked={ownershipChecked}
-      isOwned={isOwned}
-      linking={linking}
-      linkError={linkError}
-      onLink={linkThisDevice}
-    >
-      <div className="page argus-page">
-        {/* Header Bar */}
-        <ArgusHeader
-          deviceName={getDeviceDisplayName(deviceRecord)}
-          deviceLabel={deviceRecord?.room}
-          online={status.online}
+    <div className="page argus-page">
+      {/* Header Bar */}
+      <ArgusHeader
+        deviceName={getDeviceDisplayName(deviceId)}
+        online={status.online}
           lastSeenText={status.lastSeenText}
           rssi={info?.rssi}
           configMode={isConfigActive}
           showBack={true}
         />
-
-        <DeviceSwitcher activeDeviceId={deviceId} hrefFor={(id) => `/device/${id}`} />
 
         {/* Warning banner when this device is offline */}
         {!status.online && (
@@ -203,6 +184,5 @@ export default function DeviceDashboard() {
           online={status.online}
         />
       </div>
-    </DeviceOwnershipGate>
   );
 }

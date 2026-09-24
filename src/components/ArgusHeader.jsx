@@ -1,7 +1,6 @@
 import React from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link } from "react-router-dom";
 import { useTheme } from "../utils/theme.js";
-import { useAuth } from "../utils/AuthContext.jsx";
 
 export default function ArgusHeader({
   deviceName,
@@ -14,14 +13,7 @@ export default function ArgusHeader({
   showStatus = true,
 }) {
   const { theme, toggleTheme } = useTheme();
-  const { logout } = useAuth();
-  const navigate = useNavigate();
   const localTimeStr = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-
-  const handleLogout = async () => {
-    await logout();
-    navigate("/login", { replace: true });
-  };
 
   return (
     <div className="argus-header-sticky-wrapper">
@@ -86,32 +78,6 @@ export default function ArgusHeader({
               </svg>
             )}
             <span className="theme-toggle-label">{theme === "dark" ? "Light" : "Dark"}</span>
-          </button>
-
-          <Link to="/add-device" className="argus-theme-toggle-btn" title="Add a monitor">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
-              <circle cx="12" cy="12" r="9" />
-              <line x1="12" y1="8" x2="12" y2="16" />
-              <line x1="8" y1="12" x2="16" y2="12" />
-            </svg>
-            <span className="theme-toggle-label">Add Device</span>
-          </Link>
-
-          <Link to="/profile" className="argus-theme-toggle-btn" title="Your profile">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
-              <circle cx="12" cy="8" r="4" />
-              <path d="M4 20c0-4 4-6 8-6s8 2 8 6" />
-            </svg>
-            <span className="theme-toggle-label">Profile</span>
-          </Link>
-
-          <button className="argus-theme-toggle-btn" onClick={handleLogout} title="Sign out">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
-              <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
-              <polyline points="16 17 21 12 16 7" />
-              <line x1="21" y1="12" x2="9" y2="12" />
-            </svg>
-            <span className="theme-toggle-label">Sign Out</span>
           </button>
 
           {configMode && (

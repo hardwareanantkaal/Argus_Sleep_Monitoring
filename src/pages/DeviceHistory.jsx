@@ -5,38 +5,29 @@ import { ref, onValue } from "firebase/database";
 
 import ArgusHeader from "../components/ArgusHeader.jsx";
 import HistorySection from "../components/HistorySection.jsx";
-import DeviceOwnershipGate from "../components/DeviceOwnershipGate.jsx";
-import DeviceSwitcher from "../components/DeviceSwitcher.jsx";
 import { evaluateDeviceStatus, useTick } from "../utils/status.js";
-import { useAuth } from "../utils/AuthContext.jsx";
-import { useDeviceOwnership } from "../utils/useDeviceOwnership.js";
 import { getDeviceDisplayName } from "../utils/deviceDisplay.js";
-import { subscribeUserDeviceHistory } from "../utils/deviceHistorySync.js";
+import { subscribeDeviceHistory } from "../utils/deviceHistorySync.js";
 import { setLastDeviceId } from "../utils/lastDevice.js";
+import { normalizeMacNoColons } from "../utils/mac.js";
 
 export default function DeviceHistory() {
   const { deviceId: rawDeviceId } = useParams();
-  const { user } = useAuth();
+  const deviceId = normalizeMacNoColons(rawDeviceId);
   const [info, setInfo] = useState(null);
   const [live, setLive] = useState(null);
   const [liveHistory, setLiveHistory] = useState(null);
   const [archivedHistory, setArchivedHistory] = useState(null);
   const [lastReceivedAt, setLastReceivedAt] = useState(null);
 
-  const { ownershipChecked, isOwned, deviceRecord, deviceId, linking, linkError, linkThisDevice } = useDeviceOwnership(
-    user.email,
-    rawDeviceId
-  );
-
   const nowMs = useTick(1000);
 
   // Remember this as the last-viewed device, for the sidebar's Live Stream / History shortcuts
   useEffect(() => {
-    if (isOwned) setLastDeviceId(deviceId);
-  }, [isOwned, deviceId]);
+    setLastDeviceId(deviceId);
+  }, [deviceId]);
 
   useEffect(() => {
-    if (!isOwned) return;
     const infoRef = ref(db, `devices/${deviceId}/info`);
     const liveRef = ref(db, `devices/${deviceId}/live`);
     const historyRef = ref(db, `devices/${deviceId}/history`);
@@ -61,14 +52,12 @@ export default function DeviceHistory() {
       unsubLive();
       unsubHistory();
     };
-  }, [isOwned, deviceId]);
+  }, [deviceId]);
 
   // Sessions the 30-minute sync job has already moved out of Realtime Database
   // (see historySyncJob.js) — still shown here, just from their new home.
   useEffect(() => {
-    if (!isOwned) return;
-    const unsub = subscribeUserDeviceHistory(
-      user.email,
+    const unsub = subscribeDeviceHistory(
       deviceId,
       setArchivedHistory,
       (err) => {
@@ -77,7 +66,7 @@ export default function DeviceHistory() {
       }
     );
     return unsub;
-  }, [isOwned, user.email, deviceId]);
+  }, [deviceId]);
 
   // A session is either still in Realtime Database (recent / not yet swept) or
   // already archived to Firestore — merge both so nothing disappears from view.
@@ -94,27 +83,16 @@ export default function DeviceHistory() {
   });
 
   return (
-    <DeviceOwnershipGate
-      ownershipChecked={ownershipChecked}
-      isOwned={isOwned}
-      linking={linking}
-      linkError={linkError}
-      onLink={linkThisDevice}
-    >
-      <div className="page argus-page">
-        <ArgusHeader
-          deviceName={getDeviceDisplayName(deviceRecord)}
-          deviceLabel={deviceRecord?.room}
-          online={status.online}
-          lastSeenText={status.lastSeenText}
-          rssi={info?.rssi}
-          showBack={true}
-        />
+    <div className="page argus-page">
+      <ArgusHeader
+        deviceName={getDeviceDisplayName(deviceId)}
+        online={status.online}
+        lastSeenText={status.lastSeenText}
+        rssi={info?.rssi}
+        showBack={true}
+      />
 
-        <DeviceSwitcher activeDeviceId={deviceId} hrefFor={(id) => `/device/${id}/history`} />
-
-        <HistorySection deviceId={deviceId} history={history} />
-      </div>
-    </DeviceOwnershipGate>
+      <HistorySection deviceId={deviceId} history={history} />
+    </div>
   );
 }

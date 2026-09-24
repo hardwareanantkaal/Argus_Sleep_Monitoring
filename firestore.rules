@@ -2,22 +2,18 @@ rules_version = '2';
 
 service cloud.firestore {
   match /databases/{database}/documents {
-    // users/{email} holds the registration profile, plus subcollections:
-    //   devices/{deviceId}         devices this user has linked (deviceId = MAC address)
-    //   devices/{deviceId}/history/{sessionId}   mirrored sleep sessions for that device
-    // Document ID is the user's email address (not the Firebase Auth uid).
-    // The users/{email}/devices linking mechanism itself allows the same deviceId
-    // under multiple users, but in practice a device can only be registered once —
-    // see manufacturedDevices below, which gates registration to a single claim.
-    match /users/{email}/{document=**} {
-      allow read, write: if request.auth != null && request.auth.token.email == email;
+    // No accounts/ownership in this app — deviceHistory/{deviceId}/history/{sessionId}
+    // is the public archive the 30-minute sync job mirrors completed sleep sessions
+    // into (see historySyncJob.js), open the same way Realtime Database is: anyone
+    // can read or write any device's history, matching the app's public-access model.
+    match /deviceHistory/{deviceId}/{document=**} {
+      allow read, write: if true;
     }
 
     // manufacturedDevices/{macNoColons} is written by the separate Argus manufacturing
     // app when a unit is flashed (chip, firmware, who flashed it — claimed: false).
-    // This consumer app only needs to read it (to check a scanned/typed MAC is a real
-    // device) and flip claimed false -> true once, when a user registers it — never
-    // create, delete, or touch the manufacturing-owned fields (chip, firmware*, flashedBy*).
+    // This app no longer reads/writes it (device claiming was removed), but the rules
+    // below are left in place since the manufacturing app may still rely on them.
     match /manufacturedDevices/{macNoColons} {
       allow read: if request.auth != null;
 

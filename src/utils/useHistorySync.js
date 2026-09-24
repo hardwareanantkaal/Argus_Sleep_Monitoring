@@ -3,16 +3,16 @@ import { runHistorySyncSweep, HISTORY_SYNC_INTERVAL_MS } from "./historySyncJob.
 
 // Runs the history transfer sweep once on mount (catch-up for whatever accumulated
 // while no one had the app open) and then every 30 minutes while the app stays open.
-export function useHistorySync(email, deviceIds) {
+export function useHistorySync(deviceIds) {
   const deviceIdsKey = (deviceIds || []).join(",");
 
   useEffect(() => {
-    if (!email || !deviceIdsKey) return;
+    if (!deviceIdsKey) return;
     const ids = deviceIdsKey.split(",");
 
     let cancelled = false;
     const sweep = () => {
-      if (!cancelled) runHistorySyncSweep(email, ids);
+      if (!cancelled) runHistorySyncSweep(ids);
     };
 
     sweep();
@@ -21,5 +21,5 @@ export function useHistorySync(email, deviceIds) {
       cancelled = true;
       clearInterval(timer);
     };
-  }, [email, deviceIdsKey]);
+  }, [deviceIdsKey]);
 }
