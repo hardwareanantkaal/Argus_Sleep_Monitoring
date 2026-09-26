@@ -1312,6 +1312,15 @@ body {
   min-width: 240px;
 }
 
+.search-icon {
+  position: absolute;
+  left: 14px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--text-subtle);
+  pointer-events: none;
+}
+
 .argus-search-input {
   width: 100%;
   background: var(--bg-card);

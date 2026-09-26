@@ -53,22 +53,35 @@ export default function SleepStageChart({ sleepTimeline, title = "Sleep Stage Ti
   const awakePct = Math.round((awakeCount / total) * 100);
   const countUnit = endMs !== null ? "min" : "";
 
-  // Dynamic Width Calculation based on total points to prevent label overlap
+  // Position each point by REAL elapsed time rather than by index, so a 20-min
+  // stretch out of a 1-hour session visually takes up ~33% of the line instead
+  // of every gap between points looking the same width regardless of duration.
+  // Falls back to equal spacing if there's no endTime to anchor against. The
+  // chart stays a fixed width (no horizontal scroll) — proportional spacing
+  // already fits any normal sleep session's timeline into it.
   const paddingLeft = 70;
   const paddingRight = 40;
-  const pointWidth = 45; // Minimum 45px width per timeline data point for clean spacing
-  const minChartWidth = 880;
-  const width = Math.max(minChartWidth, paddingLeft + paddingRight + (parsed.length - 1) * pointWidth);
+  const width = 880;
   const height = 180;
   const chartWidth = width - paddingLeft - paddingRight;
 
+  const pointsMs = endMs !== null ? parsed.map((item) => timeOfDayToMs(item.time, endMs)) : null;
+  const firstMs = pointsMs && pointsMs.length ? pointsMs[0] : null;
+  const totalSpanMs = firstMs !== null ? endMs - firstMs : null;
+  const useProportional = pointsMs && firstMs !== null && totalSpanMs !== null && totalSpanMs > 0 && pointsMs.every((ms) => ms !== null);
+
   const points = parsed.map((item, index) => {
     const meta = getStageLevel(item.stage);
-    const x = paddingLeft + (parsed.length > 1 ? (index / (parsed.length - 1)) * chartWidth : chartWidth / 2);
+    const x = useProportional
+      ? paddingLeft + ((pointsMs[index] - firstMs) / totalSpanMs) * chartWidth
+      : paddingLeft + (parsed.length > 1 ? (index / (parsed.length - 1)) * chartWidth : chartWidth / 2);
     return { x, y: meta.y, label: meta.label, color: meta.color, time: item.time, stage: item.stage };
   });
 
-  // Construct step line path (horizontal then vertical steps)
+  // Construct step line path (horizontal then vertical steps), extended to the
+  // right edge (session end / "now") so the last stage's line doesn't just stop
+  // dead at its own timestamp — it visibly continues until the session did.
+  const lineEndX = useProportional ? paddingLeft + chartWidth : (points.length ? points[points.length - 1].x : paddingLeft);
   let pathD = "";
   if (points.length > 0) {
     pathD = `M ${points[0].x} ${points[0].y}`;
@@ -76,15 +89,26 @@ export default function SleepStageChart({ sleepTimeline, title = "Sleep Stage Ti
       const curr = points[i];
       pathD += ` H ${curr.x} V ${curr.y}`;
     }
+    pathD += ` H ${lineEndX}`;
   }
 
   // Construct gradient area path
   let areaD = "";
   if (points.length > 0) {
-    areaD = `${pathD} L ${points[points.length - 1].x} ${height - 25} L ${points[0].x} ${height - 25} Z`;
+    areaD = `${pathD} L ${lineEndX} ${height - 25} L ${points[0].x} ${height - 25} Z`;
   }
 
-  const isScrollable = width > minChartWidth;
+  // Proportional spacing can put several points close together in time (and
+  // therefore in x) — decide up front which ones get a visible timestamp label
+  // so they don't overlap into unreadable text, without hiding any of the
+  // circle markers themselves.
+  const MIN_LABEL_GAP_PX = 46; // ~"HH:mm" at this font size, plus a little breathing room
+  let lastLabelX = -Infinity;
+  const showLabel = points.map((pt) => {
+    if (pt.x - lastLabelX < MIN_LABEL_GAP_PX) return false;
+    lastLabelX = pt.x;
+    return true;
+  });
 
   return (
     <div className="argus-card hypnogram-chart-card" style={{ padding: "22px" }}>
@@ -96,7 +120,7 @@ export default function SleepStageChart({ sleepTimeline, title = "Sleep Stage Ti
           <span className="argus-card-title">{title}</span>
         </div>
         <span className="argus-chip-small cyan-chip">
-          {isScrollable ? `↔ Scrollable Hypnogram (${parsed.length} points)` : "Continuous Hypnogram"}
+          Continuous Hypnogram
         </span>
       </div>
 
@@ -177,23 +201,20 @@ export default function SleepStageChart({ sleepTimeline, title = "Sleep Stage Ti
             </div>
           </div>
 
-          {/* SVG Hypnogram Line Chart with Horizontal Scrollbar Container */}
+          {/* SVG Hypnogram Line Chart — fixed width, always fits, no horizontal scroll */}
           <div
             style={{
               background: "var(--bg-card-hover)",
               padding: "18px 16px 14px 16px",
               borderRadius: "18px",
               border: "1px solid var(--border-card)",
-              overflowX: "auto",
-              WebkitOverflowScrolling: "touch",
             }}
           >
             <svg
               viewBox={`0 0 ${width} ${height}`}
               style={{
-                width: `${width}px`,
+                width: "100%",
                 height: "auto",
-                minWidth: "100%",
                 display: "block",
               }}
             >
@@ -242,18 +263,20 @@ export default function SleepStageChart({ sleepTimeline, title = "Sleep Stage Ti
                     stroke="var(--bg-deep, #0f172a)"
                     strokeWidth="2"
                   />
-                  {/* Timestamp on X-Axis */}
-                  <text
-                    x={pt.x}
-                    y={height - 5}
-                    textAnchor="middle"
-                    fill="var(--text-subtle)"
-                    fontSize="11"
-                    fontFamily="var(--font-mono)"
-                    fontWeight="600"
-                  >
-                    {pt.time}
-                  </text>
+                  {/* Timestamp on X-Axis — skipped when too close to the previous label */}
+                  {showLabel[idx] && (
+                    <text
+                      x={pt.x}
+                      y={height - 5}
+                      textAnchor="middle"
+                      fill="var(--text-subtle)"
+                      fontSize="11"
+                      fontFamily="var(--font-mono)"
+                      fontWeight="600"
+                    >
+                      {pt.time}
+                    </text>
+                  )}
                 </g>
               ))}
             </svg>

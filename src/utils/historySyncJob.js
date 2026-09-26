@@ -1,44 +1,37 @@
 import { ref, get, remove } from "firebase/database";
 import { db } from "../firebase.js";
-import { evaluateDeviceStatus } from "./status.js";
 import {
   SESSION_MERGE_GAP_MS,
   parseSessionTimeMs,
-  isSessionStillInProgress,
   getLatestDeviceSession,
   mergeSessionFragments,
   writeMergedSession,
+  extractFragmentStats,
 } from "./deviceHistorySync.js";
 
 export const HISTORY_SYNC_INTERVAL_MS = 30 * 60 * 1000; // 30 minutes
 
-// Moves completed sleep sessions out of Realtime Database and into the public
-// Firestore history (deviceHistory/{deviceId}/history/{sessionId}):
-//   - device online  -> only sessions that have finished (tonight's in-progress
-//                       session is left alone, since the firmware is still writing it)
-//   - device offline -> everything currently in history/, since the firmware
-//                       won't be finishing an in-progress session by itself
-// A session with no history data at all is left untouched either way.
+// Moves sleep sessions out of Realtime Database and into the public Firestore
+// history (deviceHistory/{deviceId}/history/{sessionId}) — every sweep, every
+// session currently in RTDB, whether it's still being actively written or not.
+// This used to skip a session still in progress (leaving it for firmware to
+// finish writing), but merging is now idempotent per source fragment (see
+// mergeSessionFragments) — re-syncing the same still-growing session on every
+// sweep is safe and is in fact what keeps its Firestore mirror (and the
+// inProgress/endTime the UI reads for the LIVE badge) from going stale while
+// it's genuinely still ongoing.
 //
 // Fragments that start within SESSION_MERGE_GAP_MS of the previous archived
 // session's end (e.g. the device briefly dropped WiFi and started a new RTDB
 // session node on reconnect) are folded into that same Firestore session doc
 // instead of becoming a separate session, so one night stays one record.
 async function syncDeviceHistory(deviceId) {
-  const [infoSnap, liveSnap, historySnap] = await Promise.all([
-    get(ref(db, `devices/${deviceId}/info`)),
-    get(ref(db, `devices/${deviceId}/live`)),
-    get(ref(db, `devices/${deviceId}/history`)),
-  ]);
-
+  const historySnap = await get(ref(db, `devices/${deviceId}/history`));
   const history = historySnap.val();
   if (!history) return;
 
-  const { online } = evaluateDeviceStatus({ info: infoSnap.val(), live: liveSnap.val() });
-  const nowMs = Date.now();
-
   const pending = Object.entries(history)
-    .filter(([, session]) => session && !(online && isSessionStillInProgress(session, nowMs)))
+    .filter(([, session]) => Boolean(session))
     .sort((a, b) => {
       const aMs = parseSessionTimeMs(a[1]?.startTime) ?? 0;
       const bMs = parseSessionTimeMs(b[1]?.startTime) ?? 0;
@@ -74,6 +67,7 @@ async function syncDeviceHistory(deviceId) {
           startTimeMs: startMs,
           endTimeMs: endMs,
           sourceSessionId: sessionId,
+          fragmentStats: { [sessionId]: extractFragmentStats(session) },
         };
         await writeMergedSession(deviceId, sessionId, newSessionData);
         mergeTarget = { id: sessionId, data: newSessionData };

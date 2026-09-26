@@ -7,6 +7,7 @@ import {
   isSessionStillInProgress,
   parseSessionTimeMs,
   smoothSleepTimeline,
+  toSessionTimeStr,
 } from "../utils/deviceHistorySync.js";
 
 const isSessionInProgress = isSessionStillInProgress;
@@ -73,11 +74,21 @@ export default function HistorySection({ deviceId, history }) {
 
   // Radar-based Light/Deep classification flip-flops every couple of minutes
   // (see conversation history) — smooth it into realistic-length stretches for
-  // display, without touching the underlying stored session data.
+  // display, without touching the underlying stored session data. Always runs,
+  // even for a session that's still growing (using "now" as the end boundary),
+  // so this matches exactly what the Live dashboard shows for the same session
+  // instead of falling back to raw/unsmoothed data while it's still in progress.
+  const effectiveEndTime = activeSession
+    ? (isSessionInProgress(activeSession) ? toSessionTimeStr(Date.now()) : activeSession.endTime)
+    : null;
+
   const smoothed = useMemo(() => {
-    if (!activeSession || isSessionInProgress(activeSession)) return null;
-    return smoothSleepTimeline(activeSession.sleepTimeline, activeSession.startTime, activeSession.endTime);
-  }, [activeSession]);
+    if (!activeSession) return null;
+    // A completed session ends with waking up, so mark the tail Awake — but not
+    // for one that's still ongoing, since we don't know they've woken up yet.
+    const isCompleted = !isSessionInProgress(activeSession);
+    return smoothSleepTimeline(activeSession.sleepTimeline, activeSession.startTime, effectiveEndTime, 15, isCompleted);
+  }, [activeSession, effectiveEndTime]);
 
   const displaySession = smoothed
     ? {
@@ -193,7 +204,7 @@ export default function HistorySection({ deviceId, history }) {
     <section className="dashboard-section history-section" style={{ marginTop: "36px" }}>
       <div className="section-header-row">
         {/* <span className="section-badge purple-bg">5. HISTORY</span> */}
-        <h2 className="section-title-bold">Session History & Staging Logs (/history)</h2>
+        <h2 className="section-title-bold">Session History & Staging Logs (history)</h2>
         <span className="section-subtitle-muted">
           · {sortedSessions.length} {sortedSessions.length === 1 ? "Session" : "Sessions"} Recorded
         </span>
@@ -202,14 +213,14 @@ export default function HistorySection({ deviceId, history }) {
       {sortedSessions.length === 0 ? (
         <div className="history-empty-card" style={{ padding: "30px", textAlign: "center", background: "var(--bg-card)", borderRadius: "20px", border: "1px dashed var(--border-card)" }}>
           <p style={{ color: "var(--text-muted)", fontSize: "14px", margin: 0 }}>
-            No recorded sleep sessions in /history yet. A session node is initialized when 5 continuous minutes of sleep are detected.
+            No recorded sleep sessions in history yet. A session node is initialized when 5 continuous minutes of sleep are detected.
           </p>
         </div>
       ) : (
         <div className="history-container">
-          {/* Interactive Session Pill Tabs */}
-          <div className="history-tabs-row" style={{ display: "flex", gap: "10px", overflowX: "auto", paddingBottom: "12px", marginBottom: "20px" }}>
-            {sortedSessions.map(([id, session]) => {
+          {/* Interactive Session Pill Tabs — last 3 only, no horizontal scroll */}
+          <div className="history-tabs-row" style={{ display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap", marginBottom: "20px" }}>
+            {sortedSessions.slice(0, 3).map(([id, session]) => {
               const isActive = id === activeSessionId;
               const inProgress = isSessionInProgress(session);
               return (
@@ -246,6 +257,57 @@ export default function HistorySection({ deviceId, history }) {
                 </button>
               );
             })}
+
+            {sortedSessions.length > 3 && (
+              <div style={{ position: "relative", display: "inline-flex" }}>
+                <select
+                  value={sortedSessions.slice(0, 3).some(([id]) => id === activeSessionId) ? "" : (activeSessionId || "")}
+                  onChange={(e) => e.target.value && setSelectedSessionId(e.target.value)}
+                  style={{
+                    appearance: "none",
+                    WebkitAppearance: "none",
+                    MozAppearance: "none",
+                    height: "40px",
+                    padding: "0 34px 0 16px",
+                    borderRadius: "14px",
+                    background: "var(--bg-card)",
+                    border: "1px solid var(--border-card)",
+                    color: "var(--text-main)",
+                    fontFamily: "inherit",
+                    fontWeight: "600",
+                    fontSize: "13px",
+                    lineHeight: "40px",
+                    cursor: "pointer",
+                    outline: "none",
+                  }}
+                >
+                  <option value="">More ({sortedSessions.length - 3})</option>
+                  {sortedSessions.slice(3).map(([id, session]) => (
+                    <option key={id} value={id}>
+                      {sessionLabels[id] || id} — {isSessionInProgress(session) ? "LIVE" : formatHoursMinutes(session?.sleepMin ?? 0)}
+                    </option>
+                  ))}
+                </select>
+                <svg
+                  width="14"
+                  height="14"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2.2"
+                  style={{
+                    position: "absolute",
+                    right: "14px",
+                    top: "50%",
+                    transform: "translateY(-50%)",
+                    color: "var(--text-subtle)",
+                    pointerEvents: "none",
+                  }}
+                >
+                  <polyline points="6 9 12 15 18 9" />
+                </svg>
+              </div>
+            )}
           </div>
 
           {/* Selected Session Details Card */}
@@ -426,7 +488,7 @@ export default function HistorySection({ deviceId, history }) {
               {/* Session Sleep Stage Chart */}
               <SleepStageChart
                 sleepTimeline={displaySession.sleepTimeline}
-                endTime={activeSession.endTime}
+                endTime={effectiveEndTime}
                 title={`Sleep Stage Timeline Graph — Session ${sessionLabels[activeSessionId] || activeSessionId}`}
               />
             </div>

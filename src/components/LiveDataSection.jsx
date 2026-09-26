@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useMemo } from "react";
 import {
   formatInBed,
   formatPresence,
@@ -10,6 +10,7 @@ import {
   getEffectiveLiveStage,
 } from "../utils/argusEnums.js";
 import SleepStageChart from "./SleepStageChart.jsx";
+import { smoothSleepTimeline, timeOfDayToMs, toSessionTimeStr } from "../utils/deviceHistorySync.js";
 
 export default function LiveDataSection({ live, online }) {
   const heartRate = live?.heartRate ?? 0;
@@ -181,12 +182,34 @@ export default function LiveDataSection({ live, online }) {
       </div>
 
       {live?.sleepTimeline && (
-        <SleepStageChart
-          sleepTimeline={live.sleepTimeline}
-          title="Live Sleep Stage Timeline (Current Session)"
-        />
+        <LiveSleepStageChart sleepTimeline={live.sleepTimeline} />
       )}
     </section>
+  );
+}
+
+// The session is still ongoing, so there's no stored endTime to anchor against —
+// use "now" as the effective end, and the timeline's own earliest entry as the
+// effective start, then run it through the exact same fold-short-segments
+// algorithm History uses, so the two views never disagree on the same session.
+function LiveSleepStageChart({ sleepTimeline }) {
+  const smoothed = useMemo(() => {
+    const keys = Object.keys(sleepTimeline || {}).sort();
+    if (keys.length === 0) return null;
+    const nowMs = Date.now();
+    const firstMs = timeOfDayToMs(keys[0], nowMs);
+    if (firstMs === null) return null;
+    const startTime = toSessionTimeStr(firstMs);
+    const endTime = toSessionTimeStr(nowMs);
+    return { ...smoothSleepTimeline(sleepTimeline, startTime, endTime), endTime };
+  }, [sleepTimeline]);
+
+  return (
+    <SleepStageChart
+      sleepTimeline={smoothed ? smoothed.timeline : sleepTimeline}
+      endTime={smoothed ? smoothed.endTime : undefined}
+      title="Live Sleep Stage Timeline (Current Session)"
+    />
   );
 }
 
