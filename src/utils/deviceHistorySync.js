@@ -175,12 +175,19 @@ export function mergeSessionFragments(existing, incoming) {
 // Any Light or Deep segment shorter than minStageDurationMin is folded forward
 // into whichever segment preceded it — it just "continues" the previous stage
 // instead of standing on its own (e.g. light 12:00-12:10, deep 12:10-12:20 (10min,
-// too short) becomes one light stretch 12:00-12:20). Awake segments are always
-// kept regardless of duration, and a short segment with nothing before it (the
-// very first segment) is also kept as-is, since there's nothing to fold into.
+// too short) becomes one light stretch 12:00-12:20).
+//
+// Awake stays "pure" — its own true recorded duration, never touched by folding:
+//   - An Awake segment is never itself folded away, at any length.
+//   - A short Light/Deep segment is NEVER folded INTO a preceding Awake segment
+//     either, even though that's normally what "fold into previous" would do —
+//     that would silently inflate a real 3-minute awakening into looking like a
+//     much longer one. It's kept as its own (possibly short) segment instead.
+// A short segment with nothing valid to fold into (the very first segment, or
+// one right after an Awake) is likewise kept as-is.
 // Returns a new sparse { timeStr: stage } timeline (one entry per transition)
 // plus duration-based minute/percent totals per stage.
-export function smoothSleepTimeline(sleepTimeline, startTime, endTime, minStageDurationMin = 15, markEndAwake = false) {
+export function smoothSleepTimeline(sleepTimeline, startTime, endTime, minStageDurationMin = 10, markEndAwake = false) {
   const entries = Object.entries(sleepTimeline || {}).sort((a, b) => a[0].localeCompare(b[0]));
   const startMs = parseSessionTimeMs(startTime);
   const endMs = parseSessionTimeMs(endTime);
@@ -210,9 +217,10 @@ export function smoothSleepTimeline(sleepTimeline, startTime, endTime, minStageD
   const folded = [];
   for (const seg of segs) {
     const durMin = (seg.endMs - seg.startMs) / 60000;
+    const prev = folded[folded.length - 1];
     const isFoldable = (seg.stage === "Light" || seg.stage === "Deep") && durMin < minStageDurationMin;
-    if (isFoldable && folded.length > 0) {
-      folded[folded.length - 1].endMs = seg.endMs;
+    if (isFoldable && prev && prev.stage !== "Awake") {
+      prev.endMs = seg.endMs;
     } else {
       folded.push({ ...seg });
     }
@@ -252,14 +260,19 @@ export function smoothSleepTimeline(sleepTimeline, startTime, endTime, minStageD
     pctByStage[stage] = Math.round((min / total) * 100);
   });
 
+  const deepMin = minutesByStage.Deep || 0;
+  const lightMin = minutesByStage.Light || 0;
+
   return {
     timeline,
     minutesByStage,
     pctByStage,
-    deepMin: minutesByStage.Deep || 0,
-    lightMin: minutesByStage.Light || 0,
+    deepMin,
+    lightMin,
     deepPct: pctByStage.Deep || 0,
     lightPct: pctByStage.Light || 0,
+    // Total time actually asleep — Light + Deep, excluding Awake periods.
+    totalSleepMin: deepMin + lightMin,
   };
 }
 

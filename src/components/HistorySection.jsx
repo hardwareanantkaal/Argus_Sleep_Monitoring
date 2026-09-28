@@ -87,7 +87,7 @@ export default function HistorySection({ deviceId, history }) {
     // A completed session ends with waking up, so mark the tail Awake — but not
     // for one that's still ongoing, since we don't know they've woken up yet.
     const isCompleted = !isSessionInProgress(activeSession);
-    return smoothSleepTimeline(activeSession.sleepTimeline, activeSession.startTime, effectiveEndTime, 15, isCompleted);
+    return smoothSleepTimeline(activeSession.sleepTimeline, activeSession.startTime, effectiveEndTime, 10, isCompleted);
   }, [activeSession, effectiveEndTime]);
 
   const displaySession = smoothed

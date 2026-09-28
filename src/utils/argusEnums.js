@@ -2,6 +2,7 @@
  * Argus Firmware Enum Mappings & Formatting Utilities
  * Exactly aligned with Firmware definitions.
  */
+import { smoothSleepTimeline } from "./deviceHistorySync.js";
 
 // 1. sleepState (also live.sleepState in firmware)
 // 0 = Deep sleep
@@ -117,8 +118,18 @@ export function formatMovement(val) {
   return isNaN(num) ? 0 : num;
 }
 
-// 8. Safely extract all `nightly` object parameters from Firebase live payload
-export function getNightlyData(live) {
+// 8. Safely extract all `nightly` object parameters.
+// The firmware writes apnea/deep/sleep-time/etc inconsistently between its two
+// output paths — live/nightly (updated in real time but often left at 0, or
+// only partially populated) vs the session docs in Firestore history (what the
+// History page reads). Mixing the two per-field caused this card to disagree
+// with History for the same session (e.g. showing a live apnea count that was
+// never written to that session's actual record). So: always source from the
+// Firestore session — the same data History shows — and only fall back to the
+// raw live/nightly fields when there's no Firestore session at all yet.
+export function getNightlyData(live, fallbackSession) {
+  if (fallbackSession) return fallbackSessionToNightly(fallbackSession);
+
   const n = live?.nightly || {};
   return {
     sApnea: n.sApnea ?? live?.sApnea ?? live?.cApnea ?? 0,
@@ -132,6 +143,30 @@ export function getNightlyData(live) {
     sSleepTime: n.sSleepTime ?? live?.sSleepTime ?? 0,
     sTurn: n.sTurn ?? live?.sTurn ?? live?.cTurn ?? 0,
     sWake: n.sWake ?? live?.sWake ?? 0,
+  };
+}
+
+function fallbackSessionToNightly(session) {
+  const smoothed = session.sleepTimeline && session.startTime && session.endTime
+    ? smoothSleepTimeline(session.sleepTimeline, session.startTime, session.endTime)
+    : null;
+
+  const sleepMin = Math.round(smoothed?.totalSleepMin ?? session.sleepMin ?? 0);
+  const awakeMin = Math.round(smoothed?.minutesByStage?.Awake ?? 0);
+  const bedMin = Number(session.bedMin) || 0;
+
+  return {
+    sApnea: session.apnea ?? 0,
+    sDeep: smoothed?.deepPct ?? session.deepPct ?? 0,
+    sExit: session.wakes ?? 0,
+    sHeart: session.avgHR ?? 0,
+    sOOB: Math.max(0, Math.round(bedMin - sleepMin - awakeMin)),
+    sResp: session.avgBR ?? 0,
+    sScore: session.score ?? 0,
+    sShallow: smoothed?.lightPct ?? session.lightPct ?? 0,
+    sSleepTime: sleepMin,
+    sTurn: session.turns ?? 0,
+    sWake: awakeMin,
   };
 }
 

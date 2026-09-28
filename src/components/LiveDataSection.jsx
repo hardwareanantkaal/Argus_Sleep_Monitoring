@@ -10,9 +10,9 @@ import {
   getEffectiveLiveStage,
 } from "../utils/argusEnums.js";
 import SleepStageChart from "./SleepStageChart.jsx";
-import { smoothSleepTimeline, timeOfDayToMs, toSessionTimeStr } from "../utils/deviceHistorySync.js";
+import { smoothSleepTimeline, timeOfDayToMs, toSessionTimeStr, isSessionStillInProgress } from "../utils/deviceHistorySync.js";
 
-export default function LiveDataSection({ live, online }) {
+export default function LiveDataSection({ live, online, fallbackSession }) {
   const heartRate = live?.heartRate ?? 0;
   const breathRate = live?.breathRate ?? 0;
   const breathStateVal = formatBreathState(live?.breathState);
@@ -181,32 +181,47 @@ export default function LiveDataSection({ live, online }) {
         </div>
       </div>
 
-      {live?.sleepTimeline && (
-        <LiveSleepStageChart sleepTimeline={live.sleepTimeline} />
+      {(fallbackSession?.sleepTimeline || live?.sleepTimeline) && (
+        <LiveSleepStageChart liveSleepTimeline={live?.sleepTimeline} fallbackSession={fallbackSession} />
       )}
     </section>
   );
 }
 
-// The session is still ongoing, so there's no stored endTime to anchor against —
-// use "now" as the effective end, and the timeline's own earliest entry as the
-// effective start, then run it through the exact same fold-short-segments
-// algorithm History uses, so the two views never disagree on the same session.
-function LiveSleepStageChart({ sleepTimeline }) {
+// Same session, same chart as History — this reads the identical Firestore
+// session doc (deviceHistory/{deviceId}/history) and runs it through the exact
+// same smoothSleepTimeline(sleepTimeline, startTime, endTime) call History
+// makes, instead of independently assembling its own version from raw RTDB.
+// That guarantees byte-identical output; the two views used to disagree because
+// they were computing from two different data sources (raw live vs synced
+// Firestore). Only falls back to raw RTDB + "now" when no Firestore session
+// exists yet at all (e.g. the very first few minutes of a brand-new session,
+// before the first sync sweep has run).
+function LiveSleepStageChart({ liveSleepTimeline, fallbackSession }) {
   const smoothed = useMemo(() => {
-    const keys = Object.keys(sleepTimeline || {}).sort();
+    if (fallbackSession?.sleepTimeline && fallbackSession?.startTime && fallbackSession?.endTime) {
+      // Same rule as History: once this session isn't actively being written
+      // anymore, it ended with waking up, so mark the tail Awake.
+      const isCompleted = !isSessionStillInProgress(fallbackSession);
+      return {
+        ...smoothSleepTimeline(fallbackSession.sleepTimeline, fallbackSession.startTime, fallbackSession.endTime, 10, isCompleted),
+        endTime: fallbackSession.endTime,
+      };
+    }
+
+    const keys = Object.keys(liveSleepTimeline || {}).sort();
     if (keys.length === 0) return null;
     const nowMs = Date.now();
     const firstMs = timeOfDayToMs(keys[0], nowMs);
     if (firstMs === null) return null;
     const startTime = toSessionTimeStr(firstMs);
     const endTime = toSessionTimeStr(nowMs);
-    return { ...smoothSleepTimeline(sleepTimeline, startTime, endTime), endTime };
-  }, [sleepTimeline]);
+    return { ...smoothSleepTimeline(liveSleepTimeline, startTime, endTime), endTime };
+  }, [liveSleepTimeline, fallbackSession]);
 
   return (
     <SleepStageChart
-      sleepTimeline={smoothed ? smoothed.timeline : sleepTimeline}
+      sleepTimeline={smoothed ? smoothed.timeline : liveSleepTimeline}
       endTime={smoothed ? smoothed.endTime : undefined}
       title="Live Sleep Stage Timeline (Current Session)"
     />

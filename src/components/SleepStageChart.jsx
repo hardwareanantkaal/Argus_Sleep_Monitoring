@@ -1,9 +1,27 @@
-import React from "react";
+import React, { useRef, useState } from "react";
 import { parseSleepTimeline } from "../utils/argusEnums.js";
 import { parseSessionTimeMs, timeOfDayToMs } from "../utils/deviceHistorySync.js";
 
+function formatHoursMinutes(totalMinutes) {
+  const mins = Number(totalMinutes);
+  if (isNaN(mins) || mins <= 0) return "0m";
+  const hrs = Math.floor(mins / 60);
+  const remMins = Math.round(mins % 60);
+  if (hrs > 0 && remMins > 0) return `${hrs}h ${remMins}m`;
+  if (hrs > 0) return `${hrs}h`;
+  return `${remMins}m`;
+}
+
+function formatFullDateTime(ms) {
+  const d = new Date(ms);
+  const pad = (n) => String(n).padStart(2, "0");
+  return `${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${d.getFullYear()} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
 export default function SleepStageChart({ sleepTimeline, title = "Sleep Stage Timeline Graph", hideIfEmpty = true, endTime }) {
   const parsed = parseSleepTimeline(sleepTimeline);
+  const svgRef = useRef(null);
+  const [hoverIdx, setHoverIdx] = useState(null);
 
   if (parsed.length === 0 && hideIfEmpty) {
     return null;
@@ -75,7 +93,7 @@ export default function SleepStageChart({ sleepTimeline, title = "Sleep Stage Ti
     const x = useProportional
       ? paddingLeft + ((pointsMs[index] - firstMs) / totalSpanMs) * chartWidth
       : paddingLeft + (parsed.length > 1 ? (index / (parsed.length - 1)) * chartWidth : chartWidth / 2);
-    return { x, y: meta.y, label: meta.label, color: meta.color, time: item.time, stage: item.stage };
+    return { x, y: meta.y, label: meta.label, color: meta.color, time: item.time, stage: item.stage, ms: pointsMs ? pointsMs[index] : null };
   });
 
   // Construct step line path (horizontal then vertical steps), extended to the
@@ -109,6 +127,44 @@ export default function SleepStageChart({ sleepTimeline, title = "Sleep Stage Ti
     lastLabelX = pt.x;
     return true;
   });
+
+  // Segment ranges (start x -> end x) used to figure out which stage the
+  // cursor is currently over, for the hover tooltip below.
+  const endTimeLabel = endTime ? (endTime.includes(" ") ? endTime.split(" ")[1].slice(0, 5) : endTime) : null;
+  const segments = points.map((pt, i) => {
+    const nextX = i + 1 < points.length ? points[i + 1].x : lineEndX;
+    const endLabel = i + 1 < points.length ? points[i + 1].time : (endTimeLabel ?? pt.time);
+    return { x: pt.x, width: Math.max(0, nextX - pt.x), stage: pt.stage, startLabel: pt.time, endLabel, color: pt.color, ms: pt.ms };
+  });
+
+  // Floating tooltip that follows the cursor — snaps to whichever segment the
+  // pointer is currently over and shows that segment's date/time + stage.
+  const handleMouseMove = (e) => {
+    const svg = svgRef.current;
+    if (!svg) return;
+    const pt = svg.createSVGPoint();
+    pt.x = e.clientX;
+    pt.y = e.clientY;
+    const ctm = svg.getScreenCTM();
+    if (!ctm) return;
+    const svgP = pt.matrixTransform(ctm.inverse());
+    let idx = segments.findIndex((s) => svgP.x >= s.x && svgP.x < s.x + s.width);
+    if (idx === -1) {
+      if (segments.length && svgP.x >= segments[segments.length - 1].x) idx = segments.length - 1;
+      else if (segments.length) idx = 0;
+      else idx = -1;
+    }
+    setHoverIdx(idx >= 0 ? idx : null);
+  };
+  const handleMouseLeave = () => setHoverIdx(null);
+
+  const hoverSeg = hoverIdx !== null ? segments[hoverIdx] : null;
+  const tooltipWidth = 150;
+  const tooltipHeight = 46;
+  const tooltipX = hoverSeg
+    ? Math.max(paddingLeft, Math.min(hoverSeg.x - tooltipWidth / 2, width - paddingRight - tooltipWidth))
+    : 0;
+  const tooltipY = 4;
 
   return (
     <div className="argus-card hypnogram-chart-card" style={{ padding: "22px" }}>
@@ -151,6 +207,24 @@ export default function SleepStageChart({ sleepTimeline, title = "Sleep Stage Ti
           >
             <div
               style={{
+                background: "rgba(16, 185, 129, 0.12)",
+                border: "1px solid rgba(16, 185, 129, 0.3)",
+                padding: "12px 16px",
+                borderRadius: "14px",
+              }}
+            >
+              <span style={{ fontSize: "11px", color: "var(--text-subtle)", fontWeight: "600" }}>Total Sleep Time</span>
+              <div style={{ fontSize: "20px", fontWeight: "800", color: "#10b981", marginTop: "2px" }}>
+                {countUnit ? formatHoursMinutes(deepCount + lightCount) : deepCount + lightCount}{" "}
+                <span style={{ fontSize: "12px", color: "var(--text-muted)", fontWeight: "600" }}>({deepPct + lightPct}%)</span>
+              </div>
+              <span style={{ fontSize: "11px", color: "var(--text-subtle)" }}>
+                {countUnit ? `${deepCount + lightCount} min · ` : ""}Light + Deep combined
+              </span>
+            </div>
+
+            <div
+              style={{
                 background: "rgba(129, 140, 248, 0.12)",
                 border: "1px solid rgba(129, 140, 248, 0.3)",
                 padding: "12px 16px",
@@ -159,11 +233,12 @@ export default function SleepStageChart({ sleepTimeline, title = "Sleep Stage Ti
             >
               <span style={{ fontSize: "11px", color: "var(--text-subtle)", fontWeight: "600" }}>Deep Sleep</span>
               <div style={{ fontSize: "20px", fontWeight: "800", color: "#818cf8", marginTop: "2px" }}>
-                {deepCount}
-                {countUnit && <span style={{ fontSize: "12px" }}> {countUnit}</span>}{" "}
+                {countUnit ? formatHoursMinutes(deepCount) : deepCount}{" "}
                 <span style={{ fontSize: "12px", color: "var(--text-muted)", fontWeight: "600" }}>({deepPct}%)</span>
               </div>
-              <span style={{ fontSize: "11px", color: "var(--text-subtle)" }}>Restorative stage</span>
+              <span style={{ fontSize: "11px", color: "var(--text-subtle)" }}>
+                {countUnit ? `${deepCount} min · ` : ""}Restorative stage
+              </span>
             </div>
 
             <div
@@ -176,11 +251,12 @@ export default function SleepStageChart({ sleepTimeline, title = "Sleep Stage Ti
             >
               <span style={{ fontSize: "11px", color: "var(--text-subtle)", fontWeight: "600" }}>Light Sleep</span>
               <div style={{ fontSize: "20px", fontWeight: "800", color: "#06b6d4", marginTop: "2px" }}>
-                {lightCount}
-                {countUnit && <span style={{ fontSize: "12px" }}> {countUnit}</span>}{" "}
+                {countUnit ? formatHoursMinutes(lightCount) : lightCount}{" "}
                 <span style={{ fontSize: "12px", color: "var(--text-muted)", fontWeight: "600" }}>({lightPct}%)</span>
               </div>
-              <span style={{ fontSize: "11px", color: "var(--text-subtle)" }}>Shallow rest stage</span>
+              <span style={{ fontSize: "11px", color: "var(--text-subtle)" }}>
+                {countUnit ? `${lightCount} min · ` : ""}Shallow rest stage
+              </span>
             </div>
 
             <div
@@ -193,11 +269,12 @@ export default function SleepStageChart({ sleepTimeline, title = "Sleep Stage Ti
             >
               <span style={{ fontSize: "11px", color: "var(--text-subtle)", fontWeight: "600" }}>Awake Periods</span>
               <div style={{ fontSize: "20px", fontWeight: "800", color: "#f59e0b", marginTop: "2px" }}>
-                {awakeCount}
-                {countUnit && <span style={{ fontSize: "12px" }}> {countUnit}</span>}{" "}
+                {countUnit ? formatHoursMinutes(awakeCount) : awakeCount}{" "}
                 <span style={{ fontSize: "12px", color: "var(--text-muted)", fontWeight: "600" }}>({awakePct}%)</span>
               </div>
-              <span style={{ fontSize: "11px", color: "var(--text-subtle)" }}>Awakenings in bed</span>
+              <span style={{ fontSize: "11px", color: "var(--text-subtle)" }}>
+                {countUnit ? `${awakeCount} min · ` : ""}Awakenings in bed
+              </span>
             </div>
           </div>
 
@@ -211,12 +288,15 @@ export default function SleepStageChart({ sleepTimeline, title = "Sleep Stage Ti
             }}
           >
             <svg
+              ref={svgRef}
               viewBox={`0 0 ${width} ${height}`}
               style={{
                 width: "100%",
                 height: "auto",
                 display: "block",
               }}
+              onMouseMove={handleMouseMove}
+              onMouseLeave={handleMouseLeave}
             >
               <defs>
                 <linearGradient id="hypnoGrad" x1="0" y1="0" x2="0" y2="1">
@@ -252,6 +332,32 @@ export default function SleepStageChart({ sleepTimeline, title = "Sleep Stage Ti
                 />
               )}
 
+              {/* Invisible hit area covering the whole plot — mouse position is
+                  tracked on the svg itself; this just extends the hoverable
+                  region to the full chart height, not just the thin line. */}
+              <rect
+                x={paddingLeft}
+                y="10"
+                width={chartWidth}
+                height={height - 35}
+                fill="transparent"
+              />
+
+              {/* Hover guide line + highlighted point */}
+              {hoverSeg && (
+                <>
+                  <line
+                    x1={hoverSeg.x}
+                    y1="10"
+                    x2={hoverSeg.x}
+                    y2={height - 25}
+                    stroke="rgba(226, 232, 240, 0.35)"
+                    strokeDasharray="3 3"
+                  />
+                  <circle cx={hoverSeg.x} cy={points[hoverIdx].y} r="6.5" fill={hoverSeg.color} stroke="#fff" strokeWidth="2" />
+                </>
+              )}
+
               {/* Transition Nodes / Circles & Timestamps */}
               {points.map((pt, idx) => (
                 <g key={idx}>
@@ -262,7 +368,9 @@ export default function SleepStageChart({ sleepTimeline, title = "Sleep Stage Ti
                     fill={pt.color}
                     stroke="var(--bg-deep, #0f172a)"
                     strokeWidth="2"
-                  />
+                  >
+                    <title>{`${pt.stage} started ${pt.time}`}</title>
+                  </circle>
                   {/* Timestamp on X-Axis — skipped when too close to the previous label */}
                   {showLabel[idx] && (
                     <text
@@ -279,6 +387,26 @@ export default function SleepStageChart({ sleepTimeline, title = "Sleep Stage Ti
                   )}
                 </g>
               ))}
+
+              {/* Floating tooltip — follows the cursor, snapped to the hovered segment */}
+              {hoverSeg && (
+                <g transform={`translate(${tooltipX}, ${tooltipY})`} style={{ pointerEvents: "none" }}>
+                  <rect
+                    width={tooltipWidth}
+                    height={tooltipHeight}
+                    rx="8"
+                    fill="#0f172a"
+                    stroke="rgba(255,255,255,0.15)"
+                  />
+                  <text x="10" y="17" fontSize="10.5" fill="#94a3b8" fontFamily="var(--font-mono)">
+                    {hoverSeg.ms !== null ? formatFullDateTime(hoverSeg.ms) : hoverSeg.startLabel}
+                  </text>
+                  <circle cx="15" cy="32" r="4" fill={hoverSeg.color} />
+                  <text x="24" y="35.5" fontSize="12" fontWeight="700" fill="#f8fafc">
+                    {hoverSeg.stage} · {hoverSeg.startLabel}–{hoverSeg.endLabel}
+                  </text>
+                </g>
+              )}
             </svg>
           </div>
         </div>

@@ -2,8 +2,8 @@ import React from "react";
 import { getNightlyData, formatRating, formatSleepState } from "../utils/argusEnums.js";
 import ArgusSleepGauge from "./ArgusSleepGauge.jsx";
 
-export default function NightlySection({ live }) {
-  const nightly = getNightlyData(live);
+export default function NightlySection({ live, fallbackSession }) {
+  const nightly = getNightlyData(live, fallbackSession);
 
   const {
     sApnea,

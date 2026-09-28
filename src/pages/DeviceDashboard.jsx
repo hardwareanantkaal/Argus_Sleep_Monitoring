@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useParams } from "react-router-dom";
 import { db } from "../firebase.js";
 import { ref, onValue, set } from "firebase/database";
@@ -13,6 +13,7 @@ import { evaluateDeviceStatus, useTick } from "../utils/status.js";
 import { getDeviceDisplayName } from "../utils/deviceDisplay.js";
 import { setLastDeviceId } from "../utils/lastDevice.js";
 import { normalizeMacNoColons } from "../utils/mac.js";
+import { subscribeDeviceHistory, parseSessionTimeMs } from "../utils/deviceHistorySync.js";
 
 export default function DeviceDashboard() {
   const { deviceId: rawDeviceId } = useParams();
@@ -22,8 +23,42 @@ export default function DeviceDashboard() {
   const [lastReceivedAt, setLastReceivedAt] = useState(null);
   const [isPlacementOpen, setIsPlacementOpen] = useState(false);
   const [updatingConfig, setUpdatingConfig] = useState(false);
+  const [archivedHistory, setArchivedHistory] = useState(null);
+  const [liveHistory, setLiveHistory] = useState(null);
 
   const nowMs = useTick(1000);
+
+  // Same session data as the History page (used for the Nightly Telemetry card
+  // and the Live Sleep Stage chart, so both pages agree exactly): Firestore's
+  // synced session doc, overridden by RTDB's own devices/{id}/history/{id} node
+  // when that session is still actively being written — the identical merge
+  // DeviceHistory.jsx uses, so "today's session" resolves to the same effective
+  // data on both pages instead of two different snapshots of it.
+  useEffect(() => {
+    const unsub = subscribeDeviceHistory(
+      deviceId,
+      setArchivedHistory,
+      (err) => console.error("Failed to subscribe to archived history:", err)
+    );
+    return unsub;
+  }, [deviceId]);
+
+  useEffect(() => {
+    const historyRef = ref(db, `devices/${deviceId}/history`);
+    return onValue(historyRef, (snap) => setLiveHistory(snap.val()));
+  }, [deviceId]);
+
+  const latestSession = useMemo(() => {
+    if (!archivedHistory && !liveHistory) return null;
+    const merged = { ...(archivedHistory || {}), ...(liveHistory || {}) };
+    let latest = null;
+    Object.entries(merged).forEach(([id, data]) => {
+      const endMs = parseSessionTimeMs(data?.endTime);
+      if (endMs === null) return;
+      if (!latest || endMs > latest.endMs) latest = { id, data, endMs };
+    });
+    return latest ? { id: latest.id, data: latest.data } : null;
+  }, [archivedHistory, liveHistory]);
 
   // Remember this as the last-viewed device, for the sidebar's Live Stream / History shortcuts
   useEffect(() => {
@@ -149,13 +184,13 @@ export default function DeviceDashboard() {
         )}
 
         {/* 1. Live Data Section */}
-        <LiveDataSection live={live} online={status.online} />
+        <LiveDataSection live={live} online={status.online} fallbackSession={latestSession?.data} />
 
         {/* 2. Composite Telemetry Section */}
         <CompositeSection live={live} />
 
         {/* 3. Nightly Telemetry Section — overall summary of tonight's session */}
-        <NightlySection live={live} />
+        <NightlySection live={live} fallbackSession={latestSession?.data} />
 
         {/* Device Controls & Settings Section */}
         <DeviceSettingsPanel
